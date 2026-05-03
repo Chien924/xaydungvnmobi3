@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_config.dart';
 import '../services/support_bot_service.dart';
+import 'web_page.dart';
 
 class SupportPage extends StatefulWidget {
   const SupportPage({super.key});
@@ -13,9 +15,21 @@ class _SupportPageState extends State<SupportPage> {
   final inputController = TextEditingController();
   final scrollController = ScrollController();
   bool sending = false;
-  List<BotSuggestion> suggestions = const [];
 
   final messages = <_ChatMessage>[];
+
+  static const List<BotSuggestion> fixedQuickSuggestions = [
+    BotSuggestion(title: 'Tài khoản', text: 'Tài khoản'),
+    BotSuggestion(title: 'Nạp tiền', text: 'Nạp tiền'),
+    BotSuggestion(title: 'Hồ sơ công ty', text: 'Hồ sơ công ty'),
+    BotSuggestion(title: 'Gói thầu', text: 'Gói thầu'),
+    BotSuggestion(title: 'Báo giá', text: 'Báo giá'),
+    BotSuggestion(title: 'Nhu cầu vật tư', text: 'Nhu cầu vật tư'),
+    BotSuggestion(title: 'Cửa hàng vật tư', text: 'Cửa hàng vật tư'),
+    BotSuggestion(title: 'Cơ giới', text: 'Cơ giới'),
+    BotSuggestion(title: 'Tổ đội', text: 'Tổ đội'),
+    BotSuggestion(title: 'Liên hệ', text: 'Liên hệ'),
+  ];
 
   @override
   void initState() {
@@ -35,8 +49,7 @@ class _SupportPageState extends State<SupportPage> {
     if (!mounted) return;
     setState(() {
       messages.clear();
-      messages.add(_ChatMessage(bot: true, text: reply.text));
-      suggestions = reply.suggestions;
+      messages.add(_ChatMessage(bot: true, text: reply.text, suggestions: reply.suggestions));
     });
     _scrollBottom();
   }
@@ -58,8 +71,7 @@ class _SupportPageState extends State<SupportPage> {
       final reply = await SupportBotService.ask(text);
       if (!mounted) return;
       setState(() {
-        messages.add(_ChatMessage(bot: true, text: reply.text));
-        if (reply.suggestions.isNotEmpty) suggestions = reply.suggestions;
+        messages.add(_ChatMessage(bot: true, text: reply.text, suggestions: reply.suggestions));
       });
     } catch (_) {
       if (!mounted) return;
@@ -82,8 +94,7 @@ class _SupportPageState extends State<SupportPage> {
       final reply = await SupportBotService.choose(item);
       if (!mounted) return;
       setState(() {
-        messages.add(_ChatMessage(bot: true, text: reply.text));
-        if (reply.suggestions.isNotEmpty) suggestions = reply.suggestions;
+        messages.add(_ChatMessage(bot: true, text: reply.text, suggestions: reply.suggestions));
       });
     } catch (_) {
       if (!mounted) return;
@@ -92,6 +103,43 @@ class _SupportPageState extends State<SupportPage> {
       if (mounted) setState(() => sending = false);
       _scrollBottom();
     }
+  }
+
+  void _openUrl(String rawUrl) {
+    final url = _normalizeUrl(rawUrl);
+    if (url.isEmpty) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WebPage(
+          title: 'Liên kết',
+          path: url,
+        ),
+      ),
+    );
+  }
+
+  String _normalizeUrl(String rawUrl) {
+    var url = rawUrl.trim();
+    if (url.isEmpty) return '';
+
+    if (url.startsWith('http://xaydungvn.com.vn')) {
+      url = url.replaceFirst('http://xaydungvn.com.vn', AppConfig.baseUrl);
+    }
+
+    if (url.startsWith('/')) {
+      url = '${AppConfig.baseUrl}$url';
+    }
+
+    if (url.startsWith('xaydungvn.com.vn')) {
+      url = 'https://$url';
+    }
+
+    if (url.contains('xaydungvn.com.vn') && !url.contains('app=1')) {
+      url += url.contains('?') ? '&app=1' : '?app=1';
+    }
+
+    return url;
   }
 
   void _scrollBottom() {
@@ -107,6 +155,8 @@ class _SupportPageState extends State<SupportPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
     return Column(
       children: [
         Container(
@@ -140,79 +190,97 @@ class _SupportPageState extends State<SupportPage> {
         Expanded(
           child: ListView.builder(
             controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
             itemCount: messages.length + (sending ? 1 : 0),
             itemBuilder: (context, index) {
-              if (index == messages.length) return const _Bubble(bot: true, text: 'Đang trả lời...');
+              if (index == messages.length) {
+                return _Bubble(
+                  bot: true,
+                  text: 'Đang trả lời...',
+                  onOpenUrl: _openUrl,
+                  onChoose: choose,
+                );
+              }
               final msg = messages[index];
-              return _Bubble(bot: msg.bot, text: msg.text);
+              return _Bubble(
+                bot: msg.bot,
+                text: msg.text,
+                suggestions: msg.suggestions,
+                onOpenUrl: _openUrl,
+                onChoose: choose,
+              );
             },
           ),
         ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(top: BorderSide(color: Color(0xffe5e7eb))),
-          ),
-          child: Column(
-            children: [
-              if (suggestions.isNotEmpty)
+        AnimatedPadding(
+          duration: const Duration(milliseconds: 160),
+          padding: EdgeInsets.only(bottom: bottomInset > 0 ? bottomInset : 0),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Color(0xffe5e7eb))),
+              boxShadow: [BoxShadow(color: Color(0x10000000), blurRadius: 12, offset: Offset(0, -4))],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 SizedBox(
-                  height: 38,
+                  height: 39,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: suggestions.length,
+                    itemCount: fixedQuickSuggestions.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 7),
                     itemBuilder: (context, index) {
-                      final item = suggestions[index];
+                      final item = fixedQuickSuggestions[index];
                       return ActionChip(
                         label: Text(item.title),
                         onPressed: () => choose(item),
                         side: const BorderSide(color: Color(0xffbbf7d0)),
                         backgroundColor: const Color(0xffecfdf5),
-                        labelStyle: const TextStyle(color: Color(0xff166534), fontWeight: FontWeight.w800),
+                        labelStyle: const TextStyle(color: Color(0xff166534), fontWeight: FontWeight.w900),
                       );
                     },
                   ),
                 ),
-              if (suggestions.isNotEmpty) const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: inputController,
-                      minLines: 1,
-                      maxLines: 5,
-                      decoration: InputDecoration(
-                        hintText: 'Nhập nội dung...',
-                        filled: true,
-                        fillColor: const Color(0xfff8fafc),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(17),
-                          borderSide: const BorderSide(color: Color(0xffe5e7eb)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: inputController,
+                        minLines: 1,
+                        maxLines: 4,
+                        decoration: InputDecoration(
+                          hintText: 'Nhập nội dung...',
+                          filled: true,
+                          fillColor: const Color(0xfff8fafc),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(17),
+                            borderSide: const BorderSide(color: Color(0xffe5e7eb)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(17),
+                            borderSide: const BorderSide(color: Color(0xffe5e7eb)),
+                          ),
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(17),
-                          borderSide: const BorderSide(color: Color(0xffe5e7eb)),
-                        ),
+                        onSubmitted: (_) => send(),
                       ),
-                      onSubmitted: (_) => send(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 52,
-                    height: 52,
-                    child: IconButton.filled(
-                      onPressed: sending ? null : () => send(),
-                      icon: const Icon(Icons.send_rounded),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 54,
+                      height: 54,
+                      child: IconButton.filled(
+                        onPressed: sending ? null : () => send(),
+                        icon: const Icon(Icons.send_rounded),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -220,21 +288,43 @@ class _SupportPageState extends State<SupportPage> {
   }
 }
 
+class _ChatMessage {
+  final bool bot;
+  final String text;
+  final List<BotSuggestion> suggestions;
+
+  const _ChatMessage({
+    required this.bot,
+    required this.text,
+    this.suggestions = const [],
+  });
+}
+
 class _Bubble extends StatelessWidget {
   final bool bot;
   final String text;
+  final List<BotSuggestion> suggestions;
+  final ValueChanged<String> onOpenUrl;
+  final ValueChanged<BotSuggestion> onChoose;
 
-  const _Bubble({required this.bot, required this.text});
+  const _Bubble({
+    required this.bot,
+    required this.text,
+    this.suggestions = const [],
+    required this.onOpenUrl,
+    required this.onChoose,
+  });
 
   @override
   Widget build(BuildContext context) {
     final maxWidth = MediaQuery.sizeOf(context).width * .84;
+    final parsed = _parseText(text);
 
     return Align(
       alignment: bot ? Alignment.centerLeft : Alignment.centerRight,
       child: Container(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: 9),
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
         decoration: BoxDecoration(
           color: bot ? Colors.white : const Color(0xff16a34a),
@@ -247,22 +337,85 @@ class _Bubble extends StatelessWidget {
           border: bot ? Border.all(color: const Color(0xffe5e7eb)) : null,
           boxShadow: bot ? const [BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 3))] : null,
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: bot ? const Color(0xff0f172a) : Colors.white,
-            fontWeight: FontWeight.w700,
-            height: 1.35,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (parsed.cleanText.isNotEmpty)
+              Text(
+                parsed.cleanText,
+                style: TextStyle(
+                  color: bot ? const Color(0xff0f172a) : Colors.white,
+                  fontWeight: FontWeight.w800,
+                  height: 1.35,
+                ),
+              ),
+            if (bot && parsed.urls.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: parsed.urls
+                    .map(
+                      (url) => ActionChip(
+                        label: const Text('Mở liên kết'),
+                        avatar: const Icon(Icons.link_rounded, size: 18, color: Color(0xff166534)),
+                        onPressed: () => onOpenUrl(url),
+                        side: const BorderSide(color: Color(0xffbbf7d0)),
+                        backgroundColor: const Color(0xffecfdf5),
+                        labelStyle: const TextStyle(color: Color(0xff166534), fontWeight: FontWeight.w900),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+            if (bot && suggestions.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: suggestions
+                    .take(10)
+                    .map(
+                      (s) => ActionChip(
+                        label: Text(s.title),
+                        onPressed: () => onChoose(s),
+                        side: const BorderSide(color: Color(0xffbbf7d0)),
+                        backgroundColor: const Color(0xffecfdf5),
+                        labelStyle: const TextStyle(color: Color(0xff166534), fontWeight: FontWeight.w900),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
+
+  _ParsedBubble _parseText(String raw) {
+    final urlReg = RegExp(r'''https?:\/\/[^\s<>"']+''', caseSensitive: false);
+    final urls = <String>[];
+
+    var clean = raw.replaceAllMapped(urlReg, (match) {
+      final u = match.group(0) ?? '';
+      final fixed = u.replaceAll(RegExp(r'[.,;]+$'), '');
+      if (fixed.isNotEmpty) urls.add(fixed);
+      return '';
+    });
+
+    clean = clean
+        .replaceAll(RegExp(r'Link\s*:\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+
+    return _ParsedBubble(cleanText: clean, urls: urls);
+  }
 }
 
-class _ChatMessage {
-  final bool bot;
-  final String text;
+class _ParsedBubble {
+  final String cleanText;
+  final List<String> urls;
 
-  const _ChatMessage({required this.bot, required this.text});
+  const _ParsedBubble({required this.cleanText, required this.urls});
 }
