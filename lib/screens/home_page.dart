@@ -4,7 +4,6 @@ import '../models/app_user.dart';
 import '../services/auth_service.dart';
 import 'login_page.dart';
 import 'register_page.dart';
-import 'support_page.dart';
 import 'web_page.dart';
 
 class AppItem {
@@ -38,6 +37,10 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     refreshUser();
+    // Tải sẵn nhiều trang web chính để khi bấm vào mở nhanh hơn.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WebPage.preloadAll();
+    });
   }
 
   Future<void> refreshUser() async {
@@ -62,12 +65,18 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(builder: (_) => const LoginPage()),
     );
-    if (ok == true) await refreshUser();
+    if (ok == true) {
+      WebPage.resetCachedControllers();
+      await refreshUser();
+      WebPage.preloadAll();
+    }
   }
 
   Future<void> logout() async {
     await AuthService.logout();
+    WebPage.resetCachedControllers();
     await refreshUser();
+    WebPage.preloadAll();
   }
 
   void goTab(int index) {
@@ -202,7 +211,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _supportTab() {
-    return const SupportPage();
+    // Hỗ trợ chuyển sang trang web test nhanh để bạn kiểm tra bot-api.php trên web trước,
+    // sau đó app nhúng nguyên trang này trong app.
+    return const WebPage(title: 'Hỗ trợ', path: '/app-ho-tro-test.php', embedded: true);
   }
 
   Future<void> openRegister() async {
@@ -210,7 +221,11 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(builder: (_) => const RegisterPage()),
     );
-    if (ok == true) await refreshUser();
+    if (ok == true) {
+      WebPage.resetCachedControllers();
+      await refreshUser();
+      WebPage.preloadAll();
+    }
   }
 
   Widget _notificationTab() {

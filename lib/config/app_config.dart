@@ -8,6 +8,7 @@ class AppConfig {
   ];
 
   static const List<String> registerEndpoints = [
+    '$baseUrl/app-dang-ky-api.php',
     '$apiBaseUrl/auth/register.php',
     '$apiBaseUrl/app/register.php',
   ];
@@ -17,9 +18,54 @@ class AppConfig {
     '$apiBaseUrl/app/me.php',
   ];
 
-  // Bot chat web cũ thường nằm ở file này. App sẽ gọi API này trước,
-  // nếu API trả khác định dạng thì app vẫn có trả lời dự phòng.
-  static const String botApiUrl = '$baseUrl/bot-api.php';
+  // Bot API cũ của bạn đang nằm trong thư mục "bot chat".
+  // Encode dấu cách thành %20 để WebView/fetch gọi ổn định.
+  static const String botApiUrl = '$baseUrl/bot%20chat/bot-api.php';
+  static const String supportWebPath = '/app-ho-tro-test.php';
+
+  // Các trang web chính cần preload/cache sẵn để bấm vào mở nhanh.
+  // WebView vẫn tự quản lý cache HTML/CSS/JS/icon; app chỉ giữ controller để không phải tải lại từ đầu.
+  static const List<String> preloadWebPaths = [
+    // Tìm kiếm
+    '/tim-xe',
+    '/tim-vat-tu',
+    '/tim-to-doi',
+    '/tim-goi-thau.php',
+    '/tim-kiem-nhu-cau.php',
+    '/viec-lam.php',
+    '/tao-cv.php',
+
+    // Đăng tin
+    '/xe-cua-toi?tab=dang',
+    '/vat-tu-cua-toi?tab=form',
+    '/to-doi-cua-toi?tab=form',
+    '/goi-thau-cua-toi?tab=form',
+    '/nhu-cau-cua-toi?tab=form',
+    '/doi-tac-cua-toi?tab=form',
+    '/viec-lam-cua-toi.php?tab=dang',
+
+    // Quản lí
+    '/xe-cua-toi?tab=quanly',
+    '/vat-tu-cua-toi?tab=quanly',
+    '/to-doi-cua-toi?tab=quanly',
+    '/goi-thau-cua-toi?tab=quanly',
+    '/nhu-cau-cua-toi?tab=list',
+    '/doi-tac-cua-toi?tab=list_xe',
+    '/doi-tac-cua-toi?tab=list_vattu',
+    '/viec-lam-cua-toi.php?tab=quanly',
+
+    // Tài khoản
+    '/thong-tin-ca-nhan.php',
+    '/nap-tien.php',
+    '/lich-su-cua-toi.php',
+
+    // Hỗ trợ + thông tin khác
+    '/app-ho-tro-test.php',
+    '/huong-dan-su-dung.php',
+    '/chinh-sach-quy-dinh.php',
+    '/lien-he-ho-tro.php',
+    '/thong-bao-he-thong.php',
+  ];
 
   static String webPath(String path) {
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
@@ -35,52 +81,6 @@ class AppConfig {
     return uri.replace(queryParameters: params).toString();
   }
 
-  static List<String> fallbackPaths(String path) {
-    final uri = Uri.tryParse(webPath(path));
-    final cleanPath = uri?.path ?? path;
-    final query = uri?.query;
-    String addQuery(String p) => (query == null || query.isEmpty) ? p : '$p?$query';
-
-    final variants = <String>[];
-    void add(String p) {
-      if (!variants.contains(p)) variants.add(p);
-    }
-
-    // Bản gốc trước.
-    add(path);
-
-    // Nếu web rewrite bỏ .php thì thử bản không .php.
-    if (cleanPath.endsWith('.php')) {
-      add(addQuery(cleanPath.substring(0, cleanPath.length - 4)));
-    }
-
-    // Một số trang từng bị lỗi / đổi tên.
-    switch (cleanPath) {
-      case '/tim-goi-thau.php':
-        add('/tim-goi-thau');
-        add('/dau-thau.php');
-        add('/dau-thau');
-        break;
-      case '/tim-kiem-nhu-cau.php':
-        add('/tim-kiem-nhu-cau');
-        add('/nhu-cau-vat-tu.php');
-        add('/nhu-cau-vat-tu');
-        break;
-      case '/dang-ky.php':
-        add('/dang-ky');
-        add('/register.php');
-        break;
-      case '/nap-tien.php':
-        add('/nap-tien');
-        break;
-      case '/lich-su-cua-toi.php':
-        add('/lich-su-cua-toi');
-        break;
-      case '/thong-tin-ca-nhan.php':
-        add('/thong-tin-ca-nhan');
-        break;
-    }
-
-    return variants;
-  }
+  // Không dò nhiều đường dẫn nữa. Trang nào chỉ định thì mở đúng trang đó.
+  static List<String> fallbackPaths(String path) => [path];
 }
