@@ -14,12 +14,22 @@ class AppUser {
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      final text = '$value'.replaceAll(RegExp(r'[^0-9-]'), '');
+      return int.tryParse(text) ?? 0;
+    }
+
+    final username = '${json['username'] ?? json['usersname'] ?? json['tai_khoan'] ?? ''}'.trim();
+    final displayName = '${json['display_name'] ?? json['name'] ?? json['ho_ten'] ?? username}'.trim();
+
     return AppUser(
-      id: int.tryParse('${json['id'] ?? 0}') ?? 0,
-      username: '${json['username'] ?? ''}',
-      displayName: '${json['display_name'] ?? json['username'] ?? ''}',
-      balance: int.tryParse('${json['balance'] ?? 0}') ?? 0,
-      phone: '${json['phone'] ?? ''}',
+      id: parseInt(json['id'] ?? json['user_id'] ?? json['account_id']),
+      username: username,
+      displayName: displayName.isEmpty ? username : displayName,
+      balance: parseInt(json['balance'] ?? json['sodu'] ?? json['so_du'] ?? json['vnd'] ?? 0),
+      phone: '${json['phone'] ?? json['sdt'] ?? json['so_dien_thoai'] ?? ''}'.trim(),
     );
   }
 

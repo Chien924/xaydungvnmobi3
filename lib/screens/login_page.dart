@@ -14,6 +14,7 @@ class _LoginPageState extends State<LoginPage> {
   final usernameController = TextEditingController();
   final passwordController = TextEditingController();
   bool loading = false;
+  bool hidePassword = true;
   String error = '';
 
   @override
@@ -57,63 +58,156 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xfff4f7fb),
-      appBar: AppBar(title: const Text('Đăng nhập')),
+      backgroundColor: const Color(0xffeef6f0),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: const Text('Đăng nhập'),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
         children: [
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xff2f7d43), Color(0xff77a759)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 18, offset: Offset(0, 8))],
+            ),
+            child: const Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Colors.white,
+                  child: Text('XD', style: TextStyle(color: Color(0xff166534), fontWeight: FontWeight.w900, fontSize: 20)),
+                ),
+                SizedBox(width: 13),
+                Expanded(
+                  child: Text(
+                    'Xây Dựng VN',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 24),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(26),
               border: Border.all(color: const Color(0xffe5e7eb)),
+              boxShadow: const [BoxShadow(color: Color(0x0d000000), blurRadius: 16, offset: Offset(0, 6))],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Đăng nhập Xây Dựng VN', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-
+                const Text('Vào tài khoản', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: Color(0xff111827))),
                 const SizedBox(height: 18),
-                TextField(
+                _InputBox(
                   controller: usernameController,
-                  decoration: const InputDecoration(labelText: 'Tài khoản / số điện thoại', border: OutlineInputBorder()),
+                  label: 'Tài khoản / số điện thoại',
+                  icon: Icons.person_rounded,
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                _InputBox(
                   controller: passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Mật khẩu', border: OutlineInputBorder()),
+                  label: 'Mật khẩu',
+                  icon: Icons.lock_rounded,
+                  obscureText: hidePassword,
+                  suffix: IconButton(
+                    icon: Icon(hidePassword ? Icons.visibility_rounded : Icons.visibility_off_rounded),
+                    onPressed: () => setState(() => hidePassword = !hidePassword),
+                  ),
                   onSubmitted: (_) => submit(),
                 ),
                 if (error.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Text(error, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(color: const Color(0xfffff1f2), borderRadius: BorderRadius.circular(14)),
+                    child: Text(error, style: const TextStyle(color: Color(0xffbe123c), fontWeight: FontWeight.w800)),
+                  ),
                 ],
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 52,
                   child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xff2f7d43),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
                     onPressed: loading ? null : submit,
                     child: loading
-                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Đăng nhập'),
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Đăng nhập', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                   ),
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
-                  height: 48,
+                  height: 50,
                   child: OutlinedButton(
-                    onPressed: openRegister,
-                    child: const Text('Tạo tài khoản'),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xff2f7d43)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: loading ? null : openRegister,
+                    child: const Text('Tạo tài khoản mới', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xff2f7d43))),
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _InputBox extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final bool obscureText;
+  final Widget? suffix;
+  final TextInputType? keyboardType;
+  final ValueChanged<String>? onSubmitted;
+
+  const _InputBox({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.obscureText = false,
+    this.suffix,
+    this.keyboardType,
+    this.onSubmitted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      onSubmitted: onSubmitted,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: const Color(0xfff8fafc),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xffe5e7eb))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xffe5e7eb))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xff2f7d43), width: 1.6)),
       ),
     );
   }

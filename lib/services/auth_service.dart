@@ -8,6 +8,7 @@ import '../models/app_user.dart';
 
 class AuthService {
   static const String _tokenKey = 'xaydungvn_app_token';
+  static const String _userCacheKey = 'xaydungvn_app_user_cache';
 
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -17,13 +18,37 @@ class AuthService {
   }
 
   static Future<void> saveToken(String token) async {
+    if (token.trim().isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+    await prefs.setString(_tokenKey, token.trim());
+  }
+
+  static Future<void> _saveUserCache(AppUser user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userCacheKey, jsonEncode({
+      'id': user.id,
+      'username': user.username,
+      'display_name': user.displayName,
+      'balance': user.balance,
+      'phone': user.phone,
+    }));
+  }
+
+  static Future<AppUser?> cachedUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_userCacheKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final data = jsonDecode(raw);
+      if (data is Map) return AppUser.fromJson(Map<String, dynamic>.from(data));
+    } catch (_) {}
+    return null;
   }
 
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
+    await prefs.remove(_userCacheKey);
   }
 
   static Map<String, dynamic> _decodeJson(String body) {
@@ -31,7 +56,7 @@ class AuthService {
     if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<HTML')) {
       return {
         'success': false,
-        'message': 'API đang trả về HTML, thường là sai link hoặc chưa copy file PHP lên public. Hãy kiểm tra app-dang-ky-api.php trên web.'
+        'message': 'API đang trả về HTML. Kiểm tra lại file PHP trên public.',
       };
     }
     try {
@@ -42,13 +67,13 @@ class AuthService {
     } catch (_) {
       return {
         'success': false,
-        'message': 'API không trả JSON hợp lệ: ' + (body.length > 180 ? body.substring(0, 180) : body),
+        'message': 'API không trả JSON hợp lệ: ${body.length > 180 ? body.substring(0, 180) : body}',
       };
     }
   }
 
   static Map<String, dynamic>? _extractUser(Map<String, dynamic> data) {
-    final candidates = [data['user'], data['data'], data['account'], data];
+    final candidates = [data['user'], data['account'], data['profile'], data['data'], data];
     for (final item in candidates) {
       if (item is Map<String, dynamic>) return item;
       if (item is Map) return Map<String, dynamic>.from(item);
@@ -60,14 +85,26 @@ class AuthService {
     return '${data['message'] ?? data['msg'] ?? data['error'] ?? fallback}';
   }
 
+  static String _extractToken(Map<String, dynamic> data) {
+    final direct = data['token'] ?? data['access_token'];
+    if (direct != null && '$direct'.trim().isNotEmpty) return '$direct'.trim();
+    final inner = data['data'];
+    if (inner is Map) {
+      final token = inner['token'] ?? inner['access_token'];
+      if (token != null && '$token'.trim().isNotEmpty) return '$token'.trim();
+    }
+    return '';
+  }
+
   static bool _isSuccess(int statusCode, Map<String, dynamic> data) {
     return statusCode >= 200 && statusCode < 300 &&
-        (data['success'] == true || data['status'] == true || data['ok'] == true || data['code'] == 200 || data.containsKey('token'));
+        (data['success'] == true || data['status'] == true || data['ok'] == true || data['code'] == 200 || _extractToken(data).isNotEmpty);
   }
 
   static Future<AppUser?> currentUser() async {
     final token = await getToken();
-    if (token == null) return null;
+    final cache = await cachedUser();
+    if (token == null) return cache;
 
     for (final endpoint in AppConfig.meEndpoints) {
       try {
@@ -79,14 +116,16 @@ class AuthService {
         final data = _decodeJson(res.body);
         if (_isSuccess(res.statusCode, data)) {
           final userMap = _extractUser(data);
-          if (userMap != null) return AppUser.fromJson(userMap);
+          if (userMap != null) {
+            final user = AppUser.fromJson(userMap);
+            await _saveUserCache(user);
+            return user;
+          }
         }
         if (res.statusCode == 401) await logout();
-      } catch (_) {
-        // Thử endpoint tiếp theo.
-      }
+      } catch (_) {}
     }
-    return null;
+    return cache;
   }
 
   static Future<AppUser> login(String username, String password) async {
@@ -96,18 +135,20 @@ class AuthService {
         final res = await http
             .post(
               Uri.parse(endpoint),
-              headers: {'Content-Type': 'application/json; charset=utf-8'},
+              headers: {'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json'},
               body: jsonEncode({'username': username, 'password': password}),
             )
             .timeout(const Duration(seconds: 15));
 
         final data = _decodeJson(res.body);
         if (_isSuccess(res.statusCode, data)) {
-          final token = '${data['token'] ?? data['access_token'] ?? data['data']?['token'] ?? ''}';
+          final token = _extractToken(data);
           if (token.isEmpty) throw Exception('API đăng nhập chưa trả token.');
           await saveToken(token);
           final userMap = _extractUser(data) ?? {'username': username};
-          return AppUser.fromJson(userMap);
+          final user = AppUser.fromJson(userMap);
+          await _saveUserCache(user);
+          return user;
         }
         lastError = _extractMessage(data, 'Đăng nhập không thành công');
       } catch (e) {
@@ -126,8 +167,11 @@ class AuthService {
     Object? lastError;
     final payload = {
       'username': username,
+      'usersname': username,
       'password': password,
+      'password2': password,
       'confirm_password': password,
+      'password_confirmation': password,
       'phone': phone,
       'sdt': phone,
       'display_name': displayName ?? username,
@@ -139,19 +183,26 @@ class AuthService {
         final res = await http
             .post(
               Uri.parse(endpoint),
-              headers: {'Accept': 'application/json'},
-              body: payload,
+              headers: {'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json'},
+              body: jsonEncode(payload),
             )
             .timeout(const Duration(seconds: 15));
 
         final data = _decodeJson(res.body);
         if (_isSuccess(res.statusCode, data)) {
-          final token = '${data['token'] ?? data['access_token'] ?? data['data']?['token'] ?? ''}';
-          if (token.isNotEmpty) await saveToken(token);
-          final userMap = _extractUser(data) ?? {'username': username, 'phone': phone};
-          return AppUser.fromJson(userMap);
+          final token = _extractToken(data);
+          if (token.isNotEmpty) {
+            await saveToken(token);
+            final userMap = _extractUser(data) ?? {'username': username, 'phone': phone, 'sdt': phone};
+            final user = AppUser.fromJson(userMap);
+            await _saveUserCache(user);
+            return user;
+          }
+
+          // Nếu API đăng ký thành công nhưng không trả token thì tự đăng nhập ngay.
+          return await login(username, password);
         }
-        lastError = _extractMessage(data, 'Tạo tài khoản không thành công');
+        lastError = _extractMessage(data, 'Tạo tài khoản thất bại');
       } catch (e) {
         lastError = e;
       }

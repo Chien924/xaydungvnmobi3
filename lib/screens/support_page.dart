@@ -13,17 +13,32 @@ class _SupportPageState extends State<SupportPage> {
   final inputController = TextEditingController();
   final scrollController = ScrollController();
   bool sending = false;
-  List<String> suggestions = const ['Tài khoản', 'Nạp tiền', 'Đăng tin', 'Quản lí', 'Báo giá', 'Liên hệ'];
+  List<BotSuggestion> suggestions = const [];
 
-  final messages = <_ChatMessage>[
-    const _ChatMessage(bot: true, text: 'Xin chào! Bạn cần hỗ trợ mục nào?'),
-  ];
+  final messages = <_ChatMessage>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _initBot();
+  }
 
   @override
   void dispose() {
     inputController.dispose();
     scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _initBot() async {
+    final reply = await SupportBotService.init();
+    if (!mounted) return;
+    setState(() {
+      messages.clear();
+      messages.add(_ChatMessage(bot: true, text: reply.text));
+      suggestions = reply.suggestions;
+    });
+    _scrollBottom();
   }
 
   Future<void> send([String? quick]) async {
@@ -48,7 +63,31 @@ class _SupportPageState extends State<SupportPage> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => messages.add(const _ChatMessage(bot: true, text: 'Chưa kết nối được hỗ trợ. Bạn thử lại sau.')));
+      setState(() => messages.add(const _ChatMessage(bot: true, text: 'Chưa kết nối được hỗ trợ.')));
+    } finally {
+      if (mounted) setState(() => sending = false);
+      _scrollBottom();
+    }
+  }
+
+  Future<void> choose(BotSuggestion item) async {
+    if (sending) return;
+    setState(() {
+      sending = true;
+      messages.add(_ChatMessage(bot: false, text: item.title));
+    });
+    _scrollBottom();
+
+    try {
+      final reply = await SupportBotService.choose(item);
+      if (!mounted) return;
+      setState(() {
+        messages.add(_ChatMessage(bot: true, text: reply.text));
+        if (reply.suggestions.isNotEmpty) suggestions = reply.suggestions;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => messages.add(const _ChatMessage(bot: true, text: 'Chưa mở được nội dung này.')));
     } finally {
       if (mounted) setState(() => sending = false);
       _scrollBottom();
@@ -88,12 +127,12 @@ class _SupportPageState extends State<SupportPage> {
               const Expanded(
                 child: Text(
                   'Hỗ trợ',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xff06122a),
-                  ),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xff06122a)),
                 ),
+              ),
+              IconButton(
+                onPressed: _initBot,
+                icon: const Icon(Icons.refresh_rounded),
               ),
             ],
           ),
@@ -104,10 +143,7 @@ class _SupportPageState extends State<SupportPage> {
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             itemCount: messages.length + (sending ? 1 : 0),
             itemBuilder: (context, index) {
-              if (index == messages.length) {
-                return const _Bubble(bot: true, text: 'Đang trả lời...');
-              }
-
+              if (index == messages.length) return const _Bubble(bot: true, text: 'Đang trả lời...');
               final msg = messages[index];
               return _Bubble(bot: msg.bot, text: msg.text);
             },
@@ -121,32 +157,33 @@ class _SupportPageState extends State<SupportPage> {
           ),
           child: Column(
             children: [
-              SizedBox(
-                height: 38,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: suggestions.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 7),
-                  itemBuilder: (context, index) {
-                    final key = suggestions[index];
-                    return ActionChip(
-                      label: Text(key),
-                      onPressed: () => send(key),
-                      side: const BorderSide(color: Color(0xffbbf7d0)),
-                      backgroundColor: const Color(0xffecfdf5),
-                      labelStyle: const TextStyle(color: Color(0xff166534), fontWeight: FontWeight.w800),
-                    );
-                  },
+              if (suggestions.isNotEmpty)
+                SizedBox(
+                  height: 38,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: suggestions.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 7),
+                    itemBuilder: (context, index) {
+                      final item = suggestions[index];
+                      return ActionChip(
+                        label: Text(item.title),
+                        onPressed: () => choose(item),
+                        side: const BorderSide(color: Color(0xffbbf7d0)),
+                        backgroundColor: const Color(0xffecfdf5),
+                        labelStyle: const TextStyle(color: Color(0xff166534), fontWeight: FontWeight.w800),
+                      );
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
+              if (suggestions.isNotEmpty) const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: inputController,
                       minLines: 1,
-                      maxLines: 4,
+                      maxLines: 5,
                       decoration: InputDecoration(
                         hintText: 'Nhập nội dung...',
                         filled: true,
@@ -191,7 +228,7 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxWidth = MediaQuery.sizeOf(context).width * .78;
+    final maxWidth = MediaQuery.sizeOf(context).width * .84;
 
     return Align(
       alignment: bot ? Alignment.centerLeft : Alignment.centerRight,
@@ -208,11 +245,7 @@ class _Bubble extends StatelessWidget {
             bottomRight: Radius.circular(bot ? 17 : 5),
           ),
           border: bot ? Border.all(color: const Color(0xffe5e7eb)) : null,
-          boxShadow: bot
-              ? const [
-                  BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 3)),
-                ]
-              : null,
+          boxShadow: bot ? const [BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 3))] : null,
         ),
         child: Text(
           text,
