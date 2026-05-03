@@ -19,6 +19,9 @@ class _WebPageState extends State<WebPage> {
   WebViewController? controller;
   int progress = 0;
   String? error;
+  String currentUrl = '';
+  final attempted = <String>{};
+  final queue = <String>[];
 
   @override
   void initState() {
@@ -37,15 +40,46 @@ class _WebPageState extends State<WebPage> {
     return uri.replace(queryParameters: params).toString();
   }
 
+  Future<List<String>> _buildUrlQueue() async {
+    final urls = <String>[];
+    void add(String url) {
+      if (url.trim().isNotEmpty && !urls.contains(url)) urls.add(url);
+    }
+
+    for (final path in AppConfig.fallbackPaths(widget.path)) {
+      try {
+        add(await AuthService.webUrlWithSession(path));
+      } catch (_) {}
+      add(AppConfig.withAppMode(path));
+    }
+    return urls;
+  }
+
   Future<void> _initWebView() async {
     try {
-      setState(() => error = null);
-      final url = await AuthService.webUrlWithSession(widget.path);
+      setState(() {
+        error = null;
+        progress = 0;
+        attempted.clear();
+        queue.clear();
+      });
+
+      queue.addAll(await _buildUrlQueue());
+      if (queue.isEmpty) throw Exception('Không có đường dẫn để mở.');
+
       final webController = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
         ..setNavigationDelegate(
           NavigationDelegate(
-            onProgress: (value) => setState(() => progress = value),
+            onProgress: (value) {
+              if (mounted) setState(() => progress = value);
+            },
+            onPageStarted: (url) {
+              if (mounted) setState(() => currentUrl = url);
+            },
+            onPageFinished: (url) {
+              if (mounted) setState(() => currentUrl = url);
+            },
             onNavigationRequest: (request) {
               final uri = Uri.tryParse(request.url);
               if (uri == null) return NavigationDecision.prevent;
@@ -58,21 +92,46 @@ class _WebPageState extends State<WebPage> {
                 }
                 return NavigationDecision.navigate;
               }
+              // Không cho nhảy ra Chrome/trang ngoài.
               return NavigationDecision.prevent;
             },
-            onWebResourceError: (e) {
+            onWebResourceError: (e) async {
               if (e.isForMainFrame == true) {
-                setState(() => error = 'Không tải được trang. Kiểm tra mạng rồi thử lại.');
+                final loaded = await _loadNextFallback();
+                if (!loaded && mounted) {
+                  setState(() => error = 'Không tải được trang. Kiểm tra mạng hoặc đường dẫn web.');
+                }
               }
             },
           ),
-        )
-        ..loadRequest(Uri.parse(url));
+        );
 
       if (mounted) setState(() => controller = webController);
+      await _loadNextFallback();
     } catch (e) {
-      if (mounted) setState(() => error = e.toString());
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
     }
+  }
+
+  Future<bool> _loadNextFallback() async {
+    final c = controller;
+    if (c == null) return false;
+
+    while (queue.isNotEmpty) {
+      final url = queue.removeAt(0);
+      if (attempted.contains(url)) continue;
+      attempted.add(url);
+      if (mounted) {
+        setState(() {
+          error = null;
+          currentUrl = url;
+          progress = 0;
+        });
+      }
+      await c.loadRequest(Uri.parse(url));
+      return true;
+    }
+    return false;
   }
 
   Future<bool> _handleBack() async {
@@ -109,7 +168,7 @@ class _WebPageState extends State<WebPage> {
         appBar: AppBar(
           title: Text(widget.title),
           actions: [
-            IconButton(tooltip: 'Tải lại', icon: const Icon(Icons.refresh_rounded), onPressed: () => controller?.reload()),
+            IconButton(tooltip: 'Tải lại', icon: const Icon(Icons.refresh_rounded), onPressed: _initWebView),
             IconButton(tooltip: 'Trang chủ', icon: const Icon(Icons.home_rounded), onPressed: () => Navigator.popUntil(context, (route) => route.isFirst)),
           ],
         ),
@@ -124,7 +183,11 @@ class _WebPageState extends State<WebPage> {
                     children: [
                       const Icon(Icons.wifi_off_rounded, size: 56, color: Colors.grey),
                       const SizedBox(height: 12),
-                      Text(error!, textAlign: TextAlign.center),
+                      Text(error!, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      if (currentUrl.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        SelectableText(currentUrl, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Color(0xff64748b))),
+                      ],
                       const SizedBox(height: 14),
                       FilledButton(onPressed: _initWebView, child: const Text('Thử lại')),
                     ],

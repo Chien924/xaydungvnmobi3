@@ -1,33 +1,47 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import 'register_page.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _RegisterPageState extends State<RegisterPage> {
   final usernameController = TextEditingController();
+  final phoneController = TextEditingController();
   final passwordController = TextEditingController();
+  final confirmController = TextEditingController();
   bool loading = false;
   String error = '';
 
   @override
   void dispose() {
     usernameController.dispose();
+    phoneController.dispose();
     passwordController.dispose();
+    confirmController.dispose();
     super.dispose();
   }
 
   Future<void> submit() async {
     final username = usernameController.text.trim();
+    final phone = phoneController.text.trim();
     final password = passwordController.text;
+    final confirm = confirmController.text;
+
     if (username.isEmpty || password.isEmpty) {
       setState(() => error = 'Nhập tài khoản và mật khẩu.');
+      return;
+    }
+    if (password.length < 6) {
+      setState(() => error = 'Mật khẩu nên từ 6 ký tự trở lên.');
+      return;
+    }
+    if (password != confirm) {
+      setState(() => error = 'Nhập lại mật khẩu chưa khớp.');
       return;
     }
 
@@ -37,7 +51,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await AuthService.login(username, password);
+      await AuthService.register(username: username, password: password, phone: phone);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
@@ -46,19 +60,11 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> openRegister() async {
-    final ok = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const RegisterPage()),
-    );
-    if (ok == true && mounted) Navigator.pop(context, true);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xfff4f7fb),
-      appBar: AppBar(title: const Text('Đăng nhập')),
+      appBar: AppBar(title: const Text('Tạo tài khoản')),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
@@ -72,19 +78,31 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Đăng nhập Xây Dựng VN', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                const Text('Tạo tài khoản Xây Dựng VN', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 6),
-                const Text('Đăng nhập 1 lần, app sẽ tự lưu cho lần sau.', style: TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w600)),
+                const Text('Tạo xong app sẽ tự lưu đăng nhập nếu API có trả token.', style: TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w600)),
                 const SizedBox(height: 18),
                 TextField(
                   controller: usernameController,
-                  decoration: const InputDecoration(labelText: 'Tài khoản / số điện thoại', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Tên tài khoản', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Số điện thoại', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: passwordController,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: 'Mật khẩu', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Nhập lại mật khẩu', border: OutlineInputBorder()),
                   onSubmitted: (_) => submit(),
                 ),
                 if (error.isNotEmpty) ...[
@@ -99,16 +117,7 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: loading ? null : submit,
                     child: loading
                         ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Đăng nhập'),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton(
-                    onPressed: openRegister,
-                    child: const Text('Tạo tài khoản'),
+                        : const Text('Tạo tài khoản'),
                   ),
                 ),
               ],

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../services/auth_service.dart';
 import 'login_page.dart';
+import 'register_page.dart';
+import 'support_page.dart';
 import 'web_page.dart';
 
 class AppItem {
@@ -200,7 +202,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _supportTab() {
-    return const _BotSupportPage();
+    return const SupportPage();
+  }
+
+  Future<void> openRegister() async {
+    final ok = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RegisterPage()),
+    );
+    if (ok == true) await refreshUser();
   }
 
   Widget _notificationTab() {
@@ -490,7 +500,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               Expanded(child: FilledButton(onPressed: openLogin, child: const Text('Đăng nhập'))),
               const SizedBox(width: 10),
-              Expanded(child: OutlinedButton(onPressed: () => openWeb('Tạo tài khoản', '/dang-ky.php'), child: const Text('Tạo tài khoản'))),
+              Expanded(child: OutlinedButton(onPressed: openRegister, child: const Text('Tạo tài khoản'))),
             ],
           ),
         ],
@@ -579,109 +589,4 @@ class _HomePageState extends State<HomePage> {
       ],
     );
   }
-}
-
-class _BotSupportPage extends StatefulWidget {
-  const _BotSupportPage();
-
-  @override
-  State<_BotSupportPage> createState() => _BotSupportPageState();
-}
-
-class _BotSupportPageState extends State<_BotSupportPage> {
-  final messages = <_ChatMessage>[
-    const _ChatMessage(bot: true, text: 'Xin chào! Tôi là bot hỗ trợ Xây Dựng VN. Bạn cần hỗ trợ mục nào?'),
-  ];
-
-  final suggestions = const <String, String>{
-    'Tài khoản': 'Bạn có thể đăng nhập ở tab Tài khoản. App sẽ lưu đăng nhập cho lần sau.',
-    'Nạp tiền': 'Vào tab Tài khoản → Nạp tiền để mở trang nạp tiền trong app.',
-    'Đăng tin': 'Trang chủ có mục Đăng tin nhanh: đăng xe, vật tư, tổ đội, gói thầu, nhu cầu, đối tác, việc làm.',
-    'Quản lí': 'Vào tab Quản lí để chọn từng mục quản lí riêng: xe, vật tư, tổ đội, gói thầu, nhu cầu, đối tác, việc làm.',
-    'Báo giá': 'Các chức năng báo giá vẫn chạy bằng web trong app để giữ đúng hệ thống hiện tại.',
-    'Liên hệ': 'Bạn có thể vào Thông tin khác → Liên hệ hỗ trợ để mở trang liên hệ.',
-  };
-
-  void send(String key) {
-    setState(() {
-      messages.add(_ChatMessage(bot: false, text: key));
-      messages.add(_ChatMessage(bot: true, text: suggestions[key] ?? 'Mục này đang được cập nhật.'));
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xffe5e7eb))),
-            child: const Row(
-              children: [
-                CircleAvatar(backgroundColor: Color(0xffdcfce7), child: Icon(Icons.support_agent_rounded, color: Color(0xff15803d))),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Hỗ trợ bot chat', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                      SizedBox(height: 3),
-                      Text('Màn app cứng, giữ hướng bot chat cũ. Có thể nối API bot sau.', style: TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
-            itemCount: messages.length,
-            itemBuilder: (context, index) {
-              final msg = messages[index];
-              return Align(
-                alignment: msg.bot ? Alignment.centerLeft : Alignment.centerRight,
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 310),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: msg.bot ? Colors.white : const Color(0xff16a34a),
-                    borderRadius: BorderRadius.circular(16),
-                    border: msg.bot ? Border.all(color: const Color(0xffe5e7eb)) : null,
-                  ),
-                  child: Text(msg.text, style: TextStyle(color: msg.bot ? const Color(0xff0f172a) : Colors.white, fontWeight: FontWeight.w700, height: 1.35)),
-                ),
-              );
-            },
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xffe5e7eb)))),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: suggestions.keys
-                  .map((key) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ActionChip(label: Text(key), onPressed: () => send(key)),
-                      ))
-                  .toList(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ChatMessage {
-  final bool bot;
-  final String text;
-
-  const _ChatMessage({required this.bot, required this.text});
 }
