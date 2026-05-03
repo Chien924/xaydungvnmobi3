@@ -20,7 +20,7 @@ class AppConfig {
 
   // Bot API cũ của bạn đang nằm trong thư mục "bot chat".
   // Encode dấu cách thành %20 để WebView/fetch gọi ổn định.
-  static const String botApiUrl = '$baseUrl/bot%20chat/bot-api.php';
+  static const String botApiUrl = '$baseUrl/bot-api-app.php';
   static const String supportWebPath = '/app-ho-tro-test.php';
 
   // Các trang web chính cần preload/cache sẵn để bấm vào mở nhanh.
