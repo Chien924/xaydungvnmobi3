@@ -27,10 +27,24 @@ class AuthService {
   }
 
   static Map<String, dynamic> _decodeJson(String body) {
-    final decoded = jsonDecode(body);
-    if (decoded is Map<String, dynamic>) return decoded;
-    if (decoded is Map) return Map<String, dynamic>.from(decoded);
-    return {'success': false, 'message': 'API không trả JSON object'};
+    final trimmed = body.trimLeft();
+    if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<HTML')) {
+      return {
+        'success': false,
+        'message': 'API đang trả về HTML, thường là sai link hoặc chưa copy file PHP lên public. Hãy kiểm tra app-dang-ky-api.php trên web.'
+      };
+    }
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      return {'success': false, 'message': 'API không trả JSON object'};
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'API không trả JSON hợp lệ: ' + (body.length > 180 ? body.substring(0, 180) : body),
+      };
+    }
   }
 
   static Map<String, dynamic>? _extractUser(Map<String, dynamic> data) {
@@ -125,8 +139,8 @@ class AuthService {
         final res = await http
             .post(
               Uri.parse(endpoint),
-              headers: {'Content-Type': 'application/json; charset=utf-8'},
-              body: jsonEncode(payload),
+              headers: {'Accept': 'application/json'},
+              body: payload,
             )
             .timeout(const Duration(seconds: 15));
 

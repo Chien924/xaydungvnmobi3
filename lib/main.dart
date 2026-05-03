@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/home_page.dart';
+import 'screens/app_start_page.dart';
 
 void main() {
   runApp(const XayDungVnApp());
@@ -20,7 +20,7 @@ class XayDungVnApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xfff4f7fb),
         fontFamily: 'Arial',
       ),
-      home: const HomePage(),
+      home: const AppStartPage(),
     );
   }
 }

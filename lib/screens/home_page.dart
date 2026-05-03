@@ -4,6 +4,7 @@ import '../models/app_user.dart';
 import '../services/auth_service.dart';
 import 'login_page.dart';
 import 'register_page.dart';
+import 'support_page.dart';
 import 'web_page.dart';
 
 class AppItem {
@@ -162,7 +163,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 14),
           _menuSection(
             title: 'Tìm kiếm dịch vụ xây dựng',
-            subtitle: 'Tìm nhanh cơ giới, vật tư, tổ đội, gói thầu, nhu cầu, việc làm và tạo CV.',
+            subtitle: '',
             icon: Icons.search_rounded,
             color: const Color(0xff1689e8),
             bgColor: const Color(0xffeef8ff),
@@ -172,7 +173,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 14),
           _menuSection(
             title: 'Đăng tin nhanh',
-            subtitle: 'Đăng xe, vật tư, tổ đội, gói thầu, nhu cầu, đối tác và việc làm.',
+            subtitle: '',
             icon: Icons.add_rounded,
             color: const Color(0xffff8a00),
             bgColor: const Color(0xfffff8ed),
@@ -192,14 +193,14 @@ class _HomePageState extends State<HomePage> {
       children: [
         _pageHeader(
           title: 'Quản lí',
-          subtitle: 'Chọn mục cần quản lí, app sẽ mở đúng trang web trong app.',
+          subtitle: '',
           icon: Icons.folder_rounded,
           color: const Color(0xff7c3aed),
         ),
         const SizedBox(height: 14),
         _menuSection(
           title: 'Quản lí tin của tôi',
-          subtitle: 'Riêng mục đối tác tách 2 nút: đối tác xe và đối tác vật tư.',
+          subtitle: '',
           icon: Icons.grid_view_rounded,
           color: const Color(0xff7c3aed),
           bgColor: const Color(0xfff5f3ff),
@@ -211,9 +212,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _supportTab() {
-    // Hỗ trợ chuyển sang trang web test nhanh để bạn kiểm tra bot-api.php trên web trước,
-    // sau đó app nhúng nguyên trang này trong app.
-    return const WebPage(title: 'Hỗ trợ', path: '/app-ho-tro-test.php', embedded: true);
+    return const SupportPage();
   }
 
   Future<void> openRegister() async {
@@ -238,7 +237,7 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             child: _pageHeader(
               title: 'Thông báo',
-              subtitle: 'Thiết kế sẵn. Sau này chỉ cần nối API thông báo.',
+              subtitle: '',
               icon: Icons.notifications_active_rounded,
               color: const Color(0xffef4444),
             ),
@@ -282,7 +281,7 @@ class _HomePageState extends State<HomePage> {
         children: [
           _pageHeader(
             title: 'Tài khoản',
-            subtitle: 'Đăng nhập 1 lần, app sẽ tự lưu cho lần sau.',
+            subtitle: '',
             icon: Icons.person_rounded,
             color: const Color(0xff0f766e),
           ),
@@ -422,7 +421,7 @@ class _HomePageState extends State<HomePage> {
             },
           ),
           const SizedBox(height: 13),
-          Text(subtitle, style: const TextStyle(color: Color(0xff36506b), fontSize: 13, height: 1.45, fontWeight: FontWeight.w800)),
+          if (subtitle.trim().isNotEmpty) Text(subtitle, style: const TextStyle(color: Color(0xff36506b), fontSize: 13, height: 1.45, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -468,8 +467,7 @@ class _HomePageState extends State<HomePage> {
                 contentPadding: EdgeInsets.zero,
                 leading: Image.asset('assets/icons/${item.icon}.png', width: 42, height: 42, errorBuilder: (_, __, ___) => const Icon(Icons.info_rounded)),
                 title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w900)),
-                subtitle: const Text('Đường dẫn để sẵn, sửa trang web sau'),
-                trailing: const Icon(Icons.chevron_right_rounded),
+                                trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => openWeb(item.title, item.path),
               )),
         ],
@@ -490,8 +488,10 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xff06122a))),
-                const SizedBox(height: 4),
-                Text(subtitle, style: const TextStyle(fontSize: 12.5, height: 1.35, color: Color(0xff64748b), fontWeight: FontWeight.w700)),
+                if (subtitle.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(fontSize: 12.5, height: 1.35, color: Color(0xff64748b), fontWeight: FontWeight.w700)),
+                ],
               ],
             ),
           ),
@@ -508,8 +508,7 @@ class _HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Bạn chưa đăng nhập', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 6),
-          const Text('Đăng nhập để xem số dư, quản lí tin, nạp tiền và lịch sử.', style: TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w700)),
+
           const SizedBox(height: 14),
           Row(
             children: [
@@ -563,9 +562,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _notificationList({required bool userMode}) {
     final title = userMode ? 'Chưa có thông báo cá nhân mới' : 'Chưa có thông báo hệ thống mới';
-    final desc = userMode
-        ? 'Sau này API sẽ đổ thông báo báo giá, duyệt tin, số dư, gói thầu vào đây.'
-        : 'Sau này bạn có thể đăng thông báo bảo trì, cập nhật chức năng, chính sách tại đây.';
+    const desc = '';
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
@@ -577,8 +574,10 @@ class _HomePageState extends State<HomePage> {
               Icon(userMode ? Icons.notifications_none_rounded : Icons.campaign_rounded, size: 54, color: const Color(0xff94a3b8)),
               const SizedBox(height: 10),
               Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 6),
-              Text(desc, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w700, height: 1.4)),
+              if (desc.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(desc, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w700, height: 1.4)),
+              ],
             ],
           ),
         ),

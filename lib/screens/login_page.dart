@@ -73,8 +73,7 @@ class _LoginPageState extends State<LoginPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Đăng nhập Xây Dựng VN', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 6),
-                const Text('Đăng nhập 1 lần, app sẽ tự lưu cho lần sau.', style: TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w600)),
+
                 const SizedBox(height: 18),
                 TextField(
                   controller: usernameController,

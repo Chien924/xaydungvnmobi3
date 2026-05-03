@@ -79,8 +79,7 @@ class _RegisterPageState extends State<RegisterPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Tạo tài khoản Xây Dựng VN', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 6),
-                const Text('Tạo xong app sẽ tự lưu đăng nhập nếu API có trả token.', style: TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w600)),
+
                 const SizedBox(height: 18),
                 TextField(
                   controller: usernameController,

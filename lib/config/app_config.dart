@@ -68,9 +68,21 @@ class AppConfig {
   ];
 
   static String webPath(String path) {
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    if (!path.startsWith('/')) return '$baseUrl/$path';
-    return '$baseUrl$path';
+    final trimmed = path.trim();
+    // Bắt buộc toàn bộ web nội bộ chạy HTTPS để Android WebView không báo
+    // net::ERR_CLEARTEXT_NOT_PERMITTED.
+    if (trimmed.startsWith('http://xaydungvn.com.vn')) {
+      return trimmed.replaceFirst('http://xaydungvn.com.vn', 'https://xaydungvn.com.vn');
+    }
+    if (trimmed.startsWith('http://www.xaydungvn.com.vn')) {
+      return trimmed.replaceFirst('http://www.xaydungvn.com.vn', 'https://xaydungvn.com.vn');
+    }
+    if (trimmed.startsWith('https://www.xaydungvn.com.vn')) {
+      return trimmed.replaceFirst('https://www.xaydungvn.com.vn', 'https://xaydungvn.com.vn');
+    }
+    if (trimmed.startsWith('https://')) return trimmed;
+    if (!trimmed.startsWith('/')) return '$baseUrl/$trimmed';
+    return '$baseUrl$trimmed';
   }
 
   static String withAppMode(String path) {

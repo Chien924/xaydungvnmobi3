@@ -104,10 +104,16 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     if (uri == null) return url;
     final host = uri.host.toLowerCase();
     if (host != 'xaydungvn.com.vn' && host != 'www.xaydungvn.com.vn') return url;
+
     final params = Map<String, String>.from(uri.queryParameters);
-    if (params['app'] == '1') return url;
     params['app'] = '1';
-    return uri.replace(queryParameters: params).toString();
+
+    // Luôn ép HTTPS và chuẩn hoá host về xaydungvn.com.vn.
+    return uri.replace(
+      scheme: 'https',
+      host: 'xaydungvn.com.vn',
+      queryParameters: params,
+    ).toString();
   }
 
   static WebViewController _createControllerForPath(String key) {
