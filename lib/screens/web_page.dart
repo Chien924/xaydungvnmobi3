@@ -39,7 +39,6 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
   String? error;
   String currentUrl = '';
   final queue = <String>[];
-  bool desktopMode = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -47,18 +46,10 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     super.initState();
-    desktopMode = _defaultDesktopMode(widget.path);
     if (!kIsWeb) _initWebView();
   }
 
-  String get _cacheKey => _cacheKeyFor(widget.path, desktopMode);
-
-  static String _cacheKeyFor(String path, bool desktop) => '$path|${desktop ? 'pc' : 'mobi'}';
-
-  static bool _defaultDesktopMode(String path) {
-    final p = path.toLowerCase();
-    return p.contains('tao-cv') || p.contains('cv-');
-  }
+  String get _cacheKey => widget.path;
 
   static void resetCachedControllers() {
     _cache.clear();
@@ -70,8 +61,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
     try {
       for (final path in paths) {
-        final desktop = _defaultDesktopMode(path);
-        final key = _cacheKeyFor(path, desktop);
+        final key = path;
 
         if (_cache.containsKey(key)) {
           _cache[key]!.lastUsed = DateTime.now();
@@ -80,7 +70,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
         try {
           final url = await _buildFirstUrlForPath(path);
-          final webController = _createControllerForPath(key, desktopMode: desktop);
+          final webController = _createControllerForPath(key);
           _cache[key] = _CachedWebController(controller: webController, url: url, isLoading: true);
           await _trimCache();
           await webController.loadRequest(Uri.parse(url));
@@ -118,7 +108,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     ).toString();
   }
 
-  static WebViewController _createControllerForPath(String key, {required bool desktopMode}) {
+  static WebViewController _createControllerForPath(String key) {
     late final WebViewController c;
     c = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -142,9 +132,6 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
             }
             try {
               await c.runJavaScript(_hideHeadJs);
-              if (desktopMode) {
-                await c.runJavaScript(_desktopModeJs);
-              }
             } catch (_) {}
           },
           onNavigationRequest: (request) {
@@ -164,10 +151,6 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
         ),
       );
 
-    if (desktopMode) {
-      c.setUserAgent(_desktopUserAgent);
-    }
-
     return c;
   }
 
@@ -180,34 +163,11 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     }
   }
 
-  static const String _desktopUserAgent =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-
   static const String _hideHeadJs = r'''
     (function(){
-      var css = '.header,.head,.top-menu,.navbar,.menu-pc,.menu-mobile,.footer,.bottom-web,.banner-app,.mobile-bottom-nav,.app-download{display:none!important} body{padding-top:0!important;margin-top:0!important;}';
+      var css = '.header,.head,.top-menu,.navbar,.menu-pc,.menu-mobile,.footer,.bottom-web,.banner-app,.mobile-bottom-nav,.app-download{display:none!important} body{padding-top:0!important;margin-top:0!important;} .container,.main-container,.wrapper{max-width:100%!important;width:100%!important;}';
       var s=document.getElementById('xaydungvn-app-hide-head');
       if(!s){s=document.createElement('style');s.id='xaydungvn-app-hide-head';document.head.appendChild(s);} s.innerHTML=css;
-    })();
-  ''';
-
-  static const String _desktopModeJs = r'''
-    (function(){
-      var meta = document.querySelector('meta[name="viewport"]');
-      if(!meta){
-        meta=document.createElement('meta');
-        meta.name='viewport';
-        document.head.appendChild(meta);
-      }
-      meta.setAttribute('content','width=1200, initial-scale=0.32, minimum-scale=0.2, maximum-scale=3.0, user-scalable=yes');
-      document.documentElement.style.minWidth='1200px';
-      document.body.style.minWidth='1200px';
-      document.body.style.overflowX='auto';
-
-      var css='html,body{min-width:1200px!important;overflow-x:auto!important;} .container,.main-container,.wrapper{max-width:1200px!important;}';
-      var s=document.getElementById('xaydungvn-app-pc-mode');
-      if(!s){s=document.createElement('style');s.id='xaydungvn-app-pc-mode';document.head.appendChild(s);}
-      s.innerHTML=css;
     })();
   ''';
 
@@ -252,7 +212,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
       queue.addAll(await _buildUrlQueue());
       if (queue.isEmpty) throw Exception('Không có đường dẫn để mở.');
 
-      final webController = _createControllerForPath(_cacheKey, desktopMode: desktopMode);
+      final webController = _createControllerForPath(_cacheKey);
       if (mounted) setState(() => controller = webController);
       _cache[_cacheKey] = _CachedWebController(controller: webController, url: '');
       await _trimCache();
@@ -276,16 +236,6 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     _cache[_cacheKey]?.isLoading = true;
     await c.loadRequest(Uri.parse(url));
     return true;
-  }
-
-  Future<void> _toggleViewMode() async {
-    setState(() {
-      desktopMode = !desktopMode;
-      controller = null;
-      progress = 0;
-      error = null;
-    });
-    await _initWebView();
   }
 
   Future<bool> _handleBack() async {
@@ -353,11 +303,6 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
         appBar: AppBar(
           title: Text(widget.title),
           actions: [
-            TextButton.icon(
-              onPressed: _toggleViewMode,
-              icon: Icon(desktopMode ? Icons.desktop_windows_rounded : Icons.phone_android_rounded, size: 18),
-              label: Text(desktopMode ? 'PC' : 'Mobi'),
-            ),
             IconButton(tooltip: 'Tải lại', icon: const Icon(Icons.refresh_rounded), onPressed: () => _initWebView(forceReload: true)),
             IconButton(tooltip: 'Trang chủ', icon: const Icon(Icons.home_rounded), onPressed: () => Navigator.popUntil(context, (route) => route.isFirst)),
           ],
