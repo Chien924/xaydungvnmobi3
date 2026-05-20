@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_user.dart';
+import '../models/app_notification.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import 'login_page.dart';
 import 'register_page.dart';
 import 'support_page.dart';
@@ -21,6 +23,22 @@ class AppItem {
   });
 }
 
+class ManageItem {
+  final String title;
+  final String subtitle;
+  final String path;
+  final IconData icon;
+  final Color color;
+
+  const ManageItem({
+    required this.title,
+    required this.subtitle,
+    required this.path,
+    required this.icon,
+    required this.color,
+  });
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -32,12 +50,16 @@ class _HomePageState extends State<HomePage> {
   int selectedIndex = 0;
   AppUser? user;
   bool loadingUser = true;
-  int unreadCount = 10;
+  bool loadingNotifications = false;
+  String? notificationError;
+  AppNotificationData notificationData = AppNotificationData.empty();
+  int unreadCount = 0;
 
   @override
   void initState() {
     super.initState();
     refreshUser();
+    refreshNotifications();
     // Tải sẵn nhiều trang web chính để khi bấm vào mở nhanh hơn.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WebPage.preloadAll();
@@ -54,11 +76,46 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() => loadingUser = false);
   }
 
+  Future<void> refreshNotifications() async {
+    if (mounted) {
+      setState(() {
+        loadingNotifications = true;
+        notificationError = null;
+      });
+    }
+
+    try {
+      final data = await NotificationService.fetch();
+      if (mounted) {
+        setState(() {
+          notificationData = data;
+          unreadCount = data.totalUnread;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          notificationError = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => loadingNotifications = false);
+    }
+  }
+
+  Future<void> refreshHome() async {
+    await refreshUser();
+    await refreshNotifications();
+  }
+
   void openWeb(String title, String path) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => WebPage(title: title, path: path)),
-    ).then((_) => refreshUser());
+    ).then((_) {
+      refreshUser();
+      refreshNotifications();
+    });
   }
 
   Future<void> openLogin() async {
@@ -69,6 +126,7 @@ class _HomePageState extends State<HomePage> {
     if (ok == true) {
       WebPage.resetCachedControllers();
       await refreshUser();
+      await refreshNotifications();
       WebPage.preloadAll();
     }
   }
@@ -76,12 +134,19 @@ class _HomePageState extends State<HomePage> {
   Future<void> logout() async {
     await AuthService.logout();
     WebPage.resetCachedControllers();
+    if (mounted) {
+      setState(() {
+        notificationData = AppNotificationData.empty();
+        unreadCount = 0;
+      });
+    }
     await refreshUser();
     WebPage.preloadAll();
   }
 
   void goTab(int index) {
     setState(() => selectedIndex = index);
+    if (index == 3) refreshNotifications();
     if (index == 4) refreshUser();
   }
 
@@ -90,6 +155,7 @@ class _HomePageState extends State<HomePage> {
     AppItem(title: 'Cửa hàng vật tư', icon: 'vat-tu', path: '/tim-vat-tu'),
     AppItem(title: 'Tổ đội', icon: 'to-doi', path: '/tim-to-doi'),
     AppItem(title: 'Gói thầu', icon: 'goi-thau', path: '/tim-goi-thau.php'),
+    AppItem(title: 'Bản đồ xây dựng VN', icon: 'ban-do', path: '/ban-do-osm-vietnam.php'),
     AppItem(title: 'Đơn hàng vật tư', icon: 'nhu-cau', path: '/tim-kiem-nhu-cau.php'),
     AppItem(title: 'Việc làm', icon: 'viec-lam', path: '/viec-lam.php'),
     AppItem(title: 'Tạo CV', icon: 'tao-cv', path: '/tao-cv.php'),
@@ -105,15 +171,83 @@ class _HomePageState extends State<HomePage> {
     AppItem(title: 'Đăng việc làm', icon: 'dang-viec-lam1', path: '/viec-lam-cua-toi.php?tab=dang'),
   ];
 
-  static const manageItems = <AppItem>[
-    AppItem(title: 'Quản lí xe', icon: 'dang-xe1', path: '/xe-cua-toi?tab=quanly'),
-    AppItem(title: 'Quản lí vật tư', icon: 'dang-vat-tu1', path: '/vat-tu-cua-toi?tab=quanly'),
-    AppItem(title: 'Quản lí tổ đội', icon: 'dang-to-doi', path: '/to-doi-cua-toi?tab=quanly'),
-    AppItem(title: 'Quản lí gói thầu', icon: 'dang-goi-thau', path: '/goi-thau-cua-toi?tab=quanly'),
-    AppItem(title: 'Quản lí nhu cầu', icon: 'dang-nhu-cau1', path: '/nhu-cau-cua-toi?tab=list'),
-    AppItem(title: 'Đối tác xe', icon: 'dang-doi-tac', path: '/doi-tac-cua-toi?tab=list_xe'),
-    AppItem(title: 'Đối tác vật tư', icon: 'vat-tu', path: '/doi-tac-cua-toi?tab=list_vattu'),
-    AppItem(title: 'Quản lí việc làm', icon: 'dang-viec-lam1', path: '/viec-lam-cua-toi.php?tab=quanly'),
+  static const manageContentItems = <ManageItem>[
+    ManageItem(
+      title: 'Quản lí xe',
+      subtitle: 'Xe đã đăng, sửa tin, trạng thái',
+      path: '/xe-cua-toi?tab=quanly',
+      icon: Icons.local_shipping_rounded,
+      color: Color(0xff2563eb),
+    ),
+    ManageItem(
+      title: 'Xác minh xe',
+      subtitle: 'Gửi yêu cầu xác minh xe cơ giới',
+      path: '/xac-minh-xe.php',
+      icon: Icons.verified_rounded,
+      color: Color(0xff0284c7),
+    ),
+    ManageItem(
+      title: 'Quản lí vật tư',
+      subtitle: 'Cửa hàng, vật tư, báo giá',
+      path: '/vat-tu-cua-toi?tab=quanly',
+      icon: Icons.warehouse_rounded,
+      color: Color(0xff16a34a),
+    ),
+    ManageItem(
+      title: 'Quản lí tổ đội',
+      subtitle: 'Tổ đội thi công đã đăng',
+      path: '/to-doi-cua-toi?tab=quanly',
+      icon: Icons.groups_rounded,
+      color: Color(0xffea580c),
+    ),
+    ManageItem(
+      title: 'Quản lí nhu cầu',
+      subtitle: 'Đơn hàng vật tư của tôi',
+      path: '/nhu-cau-cua-toi?tab=list',
+      icon: Icons.inventory_2_rounded,
+      color: Color(0xff0f766e),
+    ),
+    ManageItem(
+      title: 'Quản lí việc làm',
+      subtitle: 'Tin tuyển dụng đã đăng',
+      path: '/viec-lam-cua-toi.php?tab=quanly',
+      icon: Icons.work_rounded,
+      color: Color(0xffdb2777),
+    ),
+  ];
+
+  static const manageTenderItems = <ManageItem>[
+    ManageItem(
+      title: 'Gói thầu đã đăng',
+      subtitle: 'Theo dõi gói mời thầu, báo giá, hồ sơ tham gia',
+      path: '/theo-doi-goi-thau?tab=goidang',
+      icon: Icons.assignment_rounded,
+      color: Color(0xff7c3aed),
+    ),
+    ManageItem(
+      title: 'Gói thầu tham gia',
+      subtitle: 'Các gói đã tham gia và báo giá đã gửi',
+      path: '/theo-doi-goi-thau?tab=goithamgia',
+      icon: Icons.handshake_rounded,
+      color: Color(0xff0891b2),
+    ),
+  ];
+
+  static const managePartnerItems = <ManageItem>[
+    ManageItem(
+      title: 'Đối tác xe',
+      subtitle: 'Danh sách đối tác cơ giới',
+      path: '/doi-tac-cua-toi?tab=list_xe',
+      icon: Icons.precision_manufacturing_rounded,
+      color: Color(0xff1d4ed8),
+    ),
+    ManageItem(
+      title: 'Đối tác vật tư',
+      subtitle: 'Nhà cung cấp, đại lý vật tư',
+      path: '/doi-tac-cua-toi?tab=list_vattu',
+      icon: Icons.storefront_rounded,
+      color: Color(0xff15803d),
+    ),
   ];
 
   static const infoItems = <AppItem>[
@@ -155,7 +289,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _homeTab() {
     return RefreshIndicator(
-      onRefresh: refreshUser,
+      onRefresh: refreshHome,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
         children: [
@@ -188,26 +322,54 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _manageTab() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-      children: [
-        _pageHeader(
-          title: 'Quản lí',
-          subtitle: '',
-          icon: Icons.folder_rounded,
-          color: const Color(0xff7c3aed),
-        ),
-        const SizedBox(height: 14),
-        _menuSection(
-          title: 'Quản lí tin của tôi',
-          subtitle: '',
-          icon: Icons.grid_view_rounded,
-          color: const Color(0xff7c3aed),
-          bgColor: const Color(0xfff5f3ff),
-          borderColor: const Color(0xffddd6fe),
-          items: manageItems,
-        ),
-      ],
+    return RefreshIndicator(
+      onRefresh: refreshHome,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+        children: [
+          _pageHeader(
+            title: 'Quản lí',
+            subtitle: 'Tách nhóm rõ ràng để thao tác nhanh, không bị rối trên điện thoại.',
+            icon: Icons.folder_rounded,
+            color: const Color(0xff7c3aed),
+          ),
+          const SizedBox(height: 14),
+          if (user == null && !loadingUser) ...[
+            _loginPrompt(),
+            const SizedBox(height: 14),
+          ],
+          _manageSection(
+            title: 'Tin đang quản lí',
+            subtitle: 'Xe, xác minh xe, vật tư, tổ đội, nhu cầu và việc làm.',
+            icon: Icons.dashboard_customize_rounded,
+            color: const Color(0xff2563eb),
+            bgColor: const Color(0xffeff6ff),
+            borderColor: const Color(0xffbfdbfe),
+            items: manageContentItems,
+          ),
+          const SizedBox(height: 14),
+          _manageSection(
+            title: 'Theo dõi gói thầu',
+            subtitle: 'Tách riêng gói đã đăng và gói đã tham gia để dễ phân biệt.',
+            icon: Icons.assignment_turned_in_rounded,
+            color: const Color(0xff7c3aed),
+            bgColor: const Color(0xfff5f3ff),
+            borderColor: const Color(0xffddd6fe),
+            items: manageTenderItems,
+            fullWidth: true,
+          ),
+          const SizedBox(height: 14),
+          _manageSection(
+            title: 'Đối tác',
+            subtitle: 'Quản lí đối tác xe và đối tác vật tư.',
+            icon: Icons.diversity_3_rounded,
+            color: const Color(0xff0f766e),
+            bgColor: const Color(0xffecfdf5),
+            borderColor: const Color(0xffbbf7d0),
+            items: managePartnerItems,
+          ),
+        ],
+      ),
     );
   }
 
@@ -223,6 +385,7 @@ class _HomePageState extends State<HomePage> {
     if (ok == true) {
       WebPage.resetCachedControllers();
       await refreshUser();
+      await refreshNotifications();
       WebPage.preloadAll();
     }
   }
@@ -242,6 +405,35 @@ class _HomePageState extends State<HomePage> {
               color: const Color(0xffef4444),
             ),
           ),
+          if (unreadCount > 0)
+            Container(
+              margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xfffff1f2),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xffffcdd2)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$unreadCount thông báo chưa đọc',
+                      style: const TextStyle(color: Color(0xffbe123c), fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _markAllNotifications,
+                    icon: const Icon(Icons.done_all_rounded, size: 18),
+                    label: const Text('Đọc tất cả'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xffbe123c),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
@@ -275,7 +467,7 @@ class _HomePageState extends State<HomePage> {
   Widget _accountTab() {
     final u = user;
     return RefreshIndicator(
-      onRefresh: refreshUser,
+      onRefresh: refreshHome,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
         children: [
@@ -414,7 +606,12 @@ class _HomePageState extends State<HomePage> {
             itemCount: items.length,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisExtent: 104, crossAxisSpacing: 11, mainAxisSpacing: 11),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              mainAxisExtent: 92,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
             itemBuilder: (context, index) {
               final item = items[index];
               return _iconButton(item: item, onTap: () => openWeb(item.title, item.path));
@@ -430,12 +627,12 @@ class _HomePageState extends State<HomePage> {
   Widget _iconButton({required AppItem item, required VoidCallback onTap}) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(15),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           child: Column(
             children: [
               Expanded(
@@ -445,9 +642,162 @@ class _HomePageState extends State<HomePage> {
                   errorBuilder: (_, __, ___) => Icon(Icons.apps_rounded, size: 42, color: Colors.grey.shade500),
                 ),
               ),
-              const SizedBox(height: 5),
-              Text(item.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xff06122a), fontSize: 11.5, height: 1.15, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              Text(item.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xff06122a), fontSize: 10.3, height: 1.12, fontWeight: FontWeight.w900)),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _manageSection({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required Color borderColor,
+    required List<ManageItem> items,
+    bool fullWidth = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
+                child: Icon(icon, color: Colors.white, size: 27),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 19, height: 1.15, color: Color(0xff06122a), fontWeight: FontWeight.w900)),
+                    if (subtitle.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(subtitle, style: const TextStyle(color: Color(0xff475569), fontSize: 12.5, height: 1.35, fontWeight: FontWeight.w700)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          if (fullWidth)
+            ...items.map((item) => _manageWideCard(item)).toList()
+          else
+            GridView.builder(
+              itemCount: items.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisExtent: 112,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemBuilder: (context, index) => _manageGridCard(items[index]),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _manageGridCard(ManageItem item) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => openWeb(item.title, item.path),
+        child: Container(
+          padding: const EdgeInsets.all(11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xffe5e7eb)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(color: item.color.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+                    child: Icon(item.icon, color: item.color, size: 21),
+                  ),
+                  const Spacer(),
+                  const Icon(Icons.chevron_right_rounded, color: Color(0xff94a3b8), size: 21),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, height: 1.15, fontWeight: FontWeight.w900, color: Color(0xff0f172a))),
+              const SizedBox(height: 4),
+              Text(item.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.2, height: 1.25, fontWeight: FontWeight.w700, color: Color(0xff64748b))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _manageWideCard(ManageItem item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => openWeb(item.title, item.path),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xffe5e7eb)),
+              boxShadow: const [BoxShadow(color: Color(0x070f172a), blurRadius: 10, offset: Offset(0, 4))],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(color: item.color.withOpacity(0.12), borderRadius: BorderRadius.circular(15)),
+                  child: Icon(item.icon, color: item.color, size: 25),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, height: 1.2, fontWeight: FontWeight.w900, color: Color(0xff0f172a))),
+                      const SizedBox(height: 4),
+                      Text(item.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, height: 1.3, fontWeight: FontWeight.w700, color: Color(0xff64748b))),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(color: item.color.withOpacity(0.10), borderRadius: BorderRadius.circular(999)),
+                  child: Icon(Icons.open_in_new_rounded, color: item.color, size: 17),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -560,28 +910,189 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _openNotification(AppNotificationItem item) async {
+    if (item.system) {
+      if (item.link.isNotEmpty) openWeb(item.title.isEmpty ? 'Thông báo hệ thống' : item.title, item.link);
+      return;
+    }
+
+    try {
+      final link = await NotificationService.markOne(item.id);
+      await refreshNotifications();
+
+      final target = link.isNotEmpty ? link : item.link;
+      if (target.isNotEmpty) {
+        openWeb(item.title.isEmpty ? 'Thông báo' : item.title, target);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  Future<void> _markAllNotifications() async {
+    try {
+      await NotificationService.markAll();
+      await refreshNotifications();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã đọc tất cả thông báo.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
   Widget _notificationList({required bool userMode}) {
-    final title = userMode ? 'Chưa có thông báo cá nhân mới' : 'Chưa có thông báo hệ thống mới';
-    const desc = '';
-    return ListView(
-      padding: const EdgeInsets.all(14),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: const Color(0xffe5e7eb))),
-          child: Column(
+    final items = userMode ? notificationData.mine : notificationData.system;
+    final emptyTitle = userMode ? 'Chưa có thông báo cá nhân mới' : 'Chưa có thông báo hệ thống mới';
+
+    if (userMode && user == null && !loadingUser) {
+      return ListView(
+        padding: const EdgeInsets.all(14),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          _loginPrompt(),
+        ],
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: refreshNotifications,
+      child: ListView(
+        padding: const EdgeInsets.all(14),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          if (loadingNotifications && items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 60),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (notificationError != null && items.isEmpty)
+            _noticeBox(
+              icon: Icons.wifi_off_rounded,
+              title: 'Chưa lấy được thông báo',
+              desc: notificationError!,
+              actionText: 'Tải lại',
+              onAction: refreshNotifications,
+            )
+          else if (items.isEmpty)
+            _noticeBox(
+              icon: userMode ? Icons.notifications_none_rounded : Icons.campaign_rounded,
+              title: emptyTitle,
+              desc: '',
+            )
+          else
+            ...items.map(_notificationCard),
+        ],
+      ),
+    );
+  }
+
+  Widget _noticeBox({
+    required IconData icon,
+    required String title,
+    String desc = '',
+    String? actionText,
+    VoidCallback? onAction,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: const Color(0xffe5e7eb))),
+      child: Column(
+        children: [
+          Icon(icon, size: 54, color: const Color(0xff94a3b8)),
+          const SizedBox(height: 10),
+          Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          if (desc.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(desc, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w700, height: 1.4)),
+          ],
+          if (actionText != null && onAction != null) ...[
+            const SizedBox(height: 12),
+            FilledButton(onPressed: onAction, child: Text(actionText)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _notificationCard(AppNotificationItem item) {
+    final color = item.isUrgent ? const Color(0xffdc2626) : const Color(0xff2563eb);
+    final title = item.title.isEmpty ? 'Thông báo' : item.title;
+    final moduleText = item.system ? 'Hệ thống' : (item.moduleLabel.isNotEmpty ? item.moduleLabel : 'Thông báo');
+    final timeText = item.timeText.isNotEmpty ? item.timeText : item.time;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xffe5e7eb)),
+        boxShadow: const [BoxShadow(color: Color(0x080f172a), blurRadius: 12, offset: Offset(0, 5))],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => _openNotification(item),
+        child: Padding(
+          padding: const EdgeInsets.all(13),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(userMode ? Icons.notifications_none_rounded : Icons.campaign_rounded, size: 54, color: const Color(0xff94a3b8)),
-              const SizedBox(height: 10),
-              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-              if (desc.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(desc, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xff64748b), fontWeight: FontWeight.w700, height: 1.4)),
-              ],
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(color: color.withOpacity(0.10), borderRadius: BorderRadius.circular(14)),
+                child: Icon(item.system ? Icons.campaign_rounded : Icons.notifications_active_rounded, color: color),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: Text(title, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: Color(0xff0f172a), height: 1.25))),
+                        if (!item.system && item.count > 1)
+                          Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(color: const Color(0xffffe4e6), borderRadius: BorderRadius.circular(999)),
+                            child: Text('+${item.count}', style: const TextStyle(color: Color(0xffbe123c), fontSize: 11, fontWeight: FontWeight.w900)),
+                          ),
+                      ],
+                    ),
+                    if (item.message.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text(item.message, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xff475569), fontSize: 12.5, height: 1.42, fontWeight: FontWeight.w600)),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                          decoration: BoxDecoration(color: const Color(0xfff1f5f9), borderRadius: BorderRadius.circular(8)),
+                          child: Text(moduleText, style: const TextStyle(color: Color(0xff475569), fontSize: 11, fontWeight: FontWeight.w900)),
+                        ),
+                        const Spacer(),
+                        if (timeText.isNotEmpty)
+                          Text(timeText, style: const TextStyle(color: Color(0xff64748b), fontSize: 11, fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -597,7 +1108,7 @@ class _HomePageState extends State<HomePage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(999)),
-              child: Text('+$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
+              child: Text(unreadCount > 99 ? '99+' : '$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
             ),
           ),
       ],

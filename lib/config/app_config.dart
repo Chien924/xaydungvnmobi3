@@ -22,6 +22,7 @@ class AppConfig {
   // Encode dấu cách thành %20 để WebView/fetch gọi ổn định.
   static const String botApiUrl = '$baseUrl/bot-api-app.php';
   static const String supportWebPath = '/app-ho-tro-test.php';
+  static const String notificationApiUrl = '$baseUrl/app-thong-bao-api.php';
 
   // Các trang web chính cần preload/cache sẵn để bấm vào mở nhanh.
   // WebView vẫn tự quản lý cache HTML/CSS/JS/icon; app chỉ giữ controller để không phải tải lại từ đầu.
@@ -69,6 +70,7 @@ class AppConfig {
 
   static String webPath(String path) {
     final trimmed = path.trim();
+
     // Bắt buộc toàn bộ web nội bộ chạy HTTPS để Android WebView không báo
     // net::ERR_CLEARTEXT_NOT_PERMITTED.
     if (trimmed.startsWith('http://xaydungvn.com.vn')) {
@@ -80,17 +82,36 @@ class AppConfig {
     if (trimmed.startsWith('https://www.xaydungvn.com.vn')) {
       return trimmed.replaceFirst('https://www.xaydungvn.com.vn', 'https://xaydungvn.com.vn');
     }
-    if (trimmed.startsWith('https://')) return trimmed;
+
+    // Link đầy đủ thì giữ nguyên, kể cả link ngoài.
+    if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) return trimmed;
+
+    // Các scheme ngoài web như tel:, mailto:, sms:, intent:, zalo: không được ghép vào domain nội bộ.
+    if (RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*:').hasMatch(trimmed)) return trimmed;
+
     if (!trimmed.startsWith('/')) return '$baseUrl/$trimmed';
     return '$baseUrl$trimmed';
   }
 
+  static bool isInternalWebUrl(String pathOrUrl) {
+    final uri = Uri.tryParse(webPath(pathOrUrl));
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    return host == 'xaydungvn.com.vn' || host == 'www.xaydungvn.com.vn';
+  }
+
   static String withAppMode(String path) {
     final rawUrl = webPath(path);
+    if (!isInternalWebUrl(rawUrl)) return rawUrl;
+
     final uri = Uri.parse(rawUrl);
     final params = Map<String, String>.from(uri.queryParameters);
     params['app'] = '1';
-    return uri.replace(queryParameters: params).toString();
+    return uri.replace(
+      scheme: 'https',
+      host: 'xaydungvn.com.vn',
+      queryParameters: params,
+    ).toString();
   }
 
   // Không dò nhiều đường dẫn nữa. Trang nào chỉ định thì mở đúng trang đó.

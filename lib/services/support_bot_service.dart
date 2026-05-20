@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
-import 'auth_service.dart';
 
 class BotSuggestion {
   final String title;
@@ -82,23 +81,13 @@ class SupportBotService {
   }
 
   static Future<Map<String, dynamic>> _post(Map<String, String> body) async {
-    final token = await AuthService.getToken();
     final sendBody = Map<String, String>.from(body);
 
-    // Quan trọng: app đăng nhập bằng token, còn bot PHP cũ kiểm tra session.
-    // Gửi token cho bot-api-app.php để PHP set $_SESSION trước khi chạy bot cũ.
-    if (token != null && token.trim().isNotEmpty) {
-      sendBody['token'] = token.trim();
-      sendBody['app_token'] = token.trim();
-    }
-
+    // Box chat trong app không yêu cầu đăng nhập.
+    // Không gửi token/session để tránh bị lệch trạng thái đăng nhập web.
     final headers = <String, String>{
       'Accept': 'application/json',
     };
-
-    if (token != null && token.trim().isNotEmpty) {
-      headers['Authorization'] = 'Bearer ${token.trim()}';
-    }
 
     final res = await http
         .post(
