@@ -266,7 +266,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
   static Future<List<String>> _pickFilesForAndroidWebView(FileSelectorParams params) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         allowMultiple: params.mode == FileSelectorMode.openMultiple,
         type: _acceptTypesPreferImage(params.acceptTypes) ? FileType.image : FileType.any,
       );
