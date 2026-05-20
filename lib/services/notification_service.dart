@@ -56,12 +56,17 @@ class NotificationService {
     final token = await AuthService.getToken();
     if (token == null || token.trim().isEmpty) return AppNotificationData.empty();
 
-    final uri = Uri.parse(AppConfig.notificationApiUrl).replace(queryParameters: {'action': 'list'});
+    // Gửi token cả trong header và query để tránh trường hợp Apache/PHP không nhận Authorization header.
+    final uri = Uri.parse(AppConfig.notificationApiUrl).replace(queryParameters: {
+      'action': 'list',
+      'token': token.trim(),
+    });
     final res = await http.get(uri, headers: await _headers()).timeout(const Duration(seconds: 15));
 
     final data = _decodeJson(res.body);
     if (!_isSuccess(res.statusCode, data)) {
-      if (res.statusCode == 401) await AuthService.logout();
+      // Không tự logout khi API thông báo lỗi 401.
+      // Nếu API thông báo chưa khớp token mà xóa token ở đây thì trang chủ/tài khoản bị mất trạng thái đăng nhập.
       throw Exception(_message(data, 'Không lấy được thông báo.'));
     }
 
@@ -71,17 +76,21 @@ class NotificationService {
   static Future<String> markOne(int id) async {
     if (id <= 0) return '';
 
+    final token = await AuthService.getToken();
     final res = await http
         .post(
           Uri.parse(AppConfig.notificationApiUrl),
           headers: await _headers(),
-          body: jsonEncode({'action': 'read_one', 'id': id}),
+          body: jsonEncode({
+            'action': 'read_one',
+            'id': id,
+            if (token != null && token.trim().isNotEmpty) 'token': token.trim(),
+          }),
         )
         .timeout(const Duration(seconds: 15));
 
     final data = _decodeJson(res.body);
     if (!_isSuccess(res.statusCode, data)) {
-      if (res.statusCode == 401) await AuthService.logout();
       throw Exception(_message(data, 'Không mở được thông báo.'));
     }
 
@@ -89,17 +98,20 @@ class NotificationService {
   }
 
   static Future<void> markAll() async {
+    final token = await AuthService.getToken();
     final res = await http
         .post(
           Uri.parse(AppConfig.notificationApiUrl),
           headers: await _headers(),
-          body: jsonEncode({'action': 'read_all'}),
+          body: jsonEncode({
+            'action': 'read_all',
+            if (token != null && token.trim().isNotEmpty) 'token': token.trim(),
+          }),
         )
         .timeout(const Duration(seconds: 15));
 
     final data = _decodeJson(res.body);
     if (!_isSuccess(res.statusCode, data)) {
-      if (res.statusCode == 401) await AuthService.logout();
       throw Exception(_message(data, 'Không đọc tất cả được.'));
     }
   }

@@ -122,7 +122,11 @@ class AuthService {
             return user;
           }
         }
-        if (res.statusCode == 401) await logout();
+        // Không tự logout khi endpoint /me trả 401.
+        // Một số server/API app có thể chưa đồng bộ token nhưng WebView vẫn còn phiên đăng nhập.
+        // Nếu xóa token ở đây, trang chủ/tài khoản sẽ hiện sai là chưa đăng nhập.
+        // Người dùng chỉ đăng xuất khi bấm nút Thoát.
+        if (res.statusCode == 401) continue;
       } catch (_) {}
     }
     return cache;
@@ -213,6 +217,10 @@ class AuthService {
   static Future<String> webUrlWithSession(String path, {bool useSessionBridge = true}) async {
     final token = await getToken();
     final appUrl = AppConfig.withAppMode(path);
+
+    // Link ngoài như Google Drive, Google Docs, Facebook... không đi qua WebView/session bridge.
+    // Những link này sẽ được app mở bằng trình duyệt/app mặc định của máy.
+    if (!AppConfig.isInternalWebUrl(appUrl)) return appUrl;
 
     if (!useSessionBridge || token == null) return appUrl;
 

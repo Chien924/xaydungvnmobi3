@@ -69,9 +69,12 @@ class _HomePageState extends State<HomePage> {
   Future<void> refreshUser() async {
     if (mounted) setState(() => loadingUser = true);
     try {
-      user = await AuthService.currentUser();
+      final current = await AuthService.currentUser();
+      user = current ?? await AuthService.cachedUser();
     } catch (_) {
-      user = null;
+      // Không xóa trạng thái đăng nhập trên UI nếu API /me lỗi tạm thời.
+      // WebView có thể vẫn còn session nên chỉ dùng cache cũ để tránh app báo out giả.
+      user = await AuthService.cachedUser();
     }
     if (mounted) setState(() => loadingUser = false);
   }
@@ -334,10 +337,9 @@ class _HomePageState extends State<HomePage> {
             color: const Color(0xff7c3aed),
           ),
           const SizedBox(height: 14),
-          if (user == null && !loadingUser) ...[
-            _loginPrompt(),
-            const SizedBox(height: 14),
-          ],
+          // Không hiện khung "Bạn chưa đăng nhập" ở tab Quản lí.
+          // Các trang quản lí bên web đã tự kiểm tra session/token; tránh trường hợp app báo chưa đăng nhập
+          // trong khi WebView vẫn đang xem/sửa dữ liệu tài khoản bình thường.
           _manageSection(
             title: 'Tin đang quản lí',
             subtitle: 'Xe, xác minh xe, vật tư, tổ đội, nhu cầu và việc làm.',

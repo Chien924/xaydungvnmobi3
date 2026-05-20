@@ -277,6 +277,13 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
           .map((file) => file.path)
           .where((path) => path != null && path.trim().isNotEmpty)
           .cast<String>()
+          .map((path) {
+            final fixed = path.trim();
+            // Android WebView cần URI hợp lệ dạng file:// hoặc content://.
+            // Trả đường dẫn thô như /storage/... có thể chọn được ảnh nhưng submit form không đính kèm file.
+            if (fixed.startsWith('file://') || fixed.startsWith('content://')) return fixed;
+            return Uri.file(fixed).toString();
+          })
           .toList();
     } catch (_) {
       return <String>[];
