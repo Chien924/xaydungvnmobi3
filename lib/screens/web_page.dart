@@ -35,7 +35,7 @@ class _CachedWebController {
 }
 
 class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
-  static const int maxCachedControllers = 80;
+  static const int maxCachedControllers = 6;
   static final Map<String, _CachedWebController> _cache = {};
   static bool _isPreloading = false;
 
@@ -61,34 +61,8 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
   }
 
   static Future<void> preloadPaths(List<String> paths) async {
-    if (kIsWeb || _isPreloading) return;
-    _isPreloading = true;
-
-    try {
-      for (final path in paths) {
-        final key = path;
-
-        if (_cache.containsKey(key)) {
-          _cache[key]!.lastUsed = DateTime.now();
-          continue;
-        }
-
-        try {
-          final url = await _buildFirstUrlForPath(path);
-          if (_shouldOpenExternally(url)) continue;
-
-          final webController = _createControllerForPath(key);
-          _cache[key] = _CachedWebController(controller: webController, url: url, isLoading: true);
-          await _trimCache();
-          await webController.loadRequest(Uri.parse(url));
-          _cache[key]?.isLoading = false;
-        } catch (_) {}
-
-        await Future<void>.delayed(const Duration(milliseconds: 80));
-      }
-    } finally {
-      _isPreloading = false;
-    }
+    // Tắt preload hàng loạt để app nhẹ và đỡ giật trên máy yếu.
+    return;
   }
 
   static Future<String> _buildFirstUrlForPath(String path) async {
@@ -302,7 +276,11 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     platformController.setOnShowFileSelector(_pickFilesForAndroidWebView);
   }
 
-  static WebViewController _createControllerForPath(String key) {
+  static WebViewController _createControllerForPath(
+    String key, {
+    void Function(String message)? onMainFrameError,
+    void Function(int value)? onProgressValue,
+  }) {
     late final WebViewController c;
     c = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -312,6 +290,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
           onProgress: (value) {
             final cached = _cache[key];
             if (cached != null) cached.lastUsed = DateTime.now();
+            onProgressValue?.call(value);
           },
           onPageStarted: (url) {
             final cached = _cache[key];
@@ -331,6 +310,12 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
             try {
               await c.runJavaScript(_hideHeadJs);
             } catch (_) {}
+          },
+          onWebResourceError: (webError) {
+            if (webError.isForMainFrame == true) {
+              _cache[key]?.isLoading = false;
+              onMainFrameError?.call('Không mở được trang');
+            }
           },
           onNavigationRequest: (request) async {
             final uri = Uri.tryParse(request.url);
@@ -371,7 +356,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
   static const String _hideHeadJs = r'''
     (function(){
-      var css = '.header,.head,.top-menu,.navbar,.menu-pc,.menu-mobile,.footer,.bottom-web,.banner-app,.mobile-bottom-nav,.app-download{display:none!important} body{padding-top:0!important;margin-top:0!important;} .container,.main-container,.wrapper{max-width:100%!important;width:100%!important;}';
+      var css = '.header,.head,.top-menu,.navbar,.menu-pc,.menu-mobile,.footer,.bottom-web,.banner-app,.mobile-bottom-nav,.app-download{display:none!important} body{padding-top:0!important;margin-top:0!important;scroll-behavior:auto!important;} .container,.main-container,.wrapper{max-width:100%!important;width:100%!important;} *,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important;} .aos-init,.aos-animate{transform:none!important;opacity:1!important;}';
       var s=document.getElementById('xaydungvn-app-hide-head');
       if(!s){s=document.createElement('style');s.id='xaydungvn-app-hide-head';document.head.appendChild(s);} s.innerHTML=css;
 
@@ -423,7 +408,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
         setState(() {
           progress = 100;
           currentUrl = firstUrl;
-          error = opened ? 'Đã mở liên kết bằng trình duyệt mặc định của máy.' : 'Chưa mở được liên kết ngoài.';
+          error = opened ? '' : 'Chưa mở được liên kết ngoài';
         });
         if (opened && !widget.embedded) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -450,7 +435,15 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
       queue.removeWhere(_shouldOpenExternally);
       if (queue.isEmpty) throw Exception('Không có đường dẫn để mở.');
 
-      final webController = _createControllerForPath(_cacheKey);
+      final webController = _createControllerForPath(
+        _cacheKey,
+        onMainFrameError: (message) {
+          if (mounted) setState(() => error = message);
+        },
+        onProgressValue: (value) {
+          if (mounted) setState(() => progress = value);
+        },
+      );
       if (mounted) setState(() => controller = webController);
       _cache[_cacheKey] = _CachedWebController(controller: webController, url: '');
       await _trimCache();
@@ -500,23 +493,41 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
       );
     }
 
-    if (error != null) {
+    if (error != null && error!.isNotEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.open_in_browser_rounded, size: 56, color: Colors.grey),
-              const SizedBox(height: 12),
-              Text(error!, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800)),
-              if (currentUrl.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                SelectableText(currentUrl, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Color(0xff64748b))),
+          padding: const EdgeInsets.all(22),
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxWidth: 360),
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xffe5e7eb)),
+              boxShadow: const [BoxShadow(color: Color(0x120f172a), blurRadius: 18, offset: Offset(0, 8))],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(color: const Color(0xffeef6ff), borderRadius: BorderRadius.circular(22)),
+                  child: const Icon(Icons.wifi_off_rounded, size: 34, color: Color(0xff2563eb)),
+                ),
+                const SizedBox(height: 14),
+                const Text('Không mở được trang', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xff0f172a))),
+                const SizedBox(height: 6),
+                const Text('Kiểm tra mạng rồi thử lại.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xff64748b))),
+                const SizedBox(height: 16),
+                SizedBox(width: double.infinity, child: FilledButton(onPressed: () => _initWebView(forceReload: true), child: const Text('Thử lại'))),
+                if (currentUrl.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(width: double.infinity, child: OutlinedButton(onPressed: () => _launchOutside(currentUrl), child: const Text('Mở trình duyệt'))),
+                ],
               ],
-              const SizedBox(height: 14),
-              FilledButton(onPressed: () => _initWebView(forceReload: true), child: const Text('Thử lại')),
-            ],
+            ),
           ),
         ),
       );

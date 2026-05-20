@@ -10,32 +10,22 @@ class NotificationService {
   static Map<String, dynamic> _decodeJson(String body) {
     final trimmed = body.trimLeft();
     if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<HTML')) {
-      return {
-        'success': false,
-        'message': 'API thông báo đang trả về HTML. Kiểm tra app-thong-bao-api.php trên public.',
-      };
+      return {'success': false, 'message': 'html'};
     }
 
     try {
       final decoded = jsonDecode(body);
       if (decoded is Map<String, dynamic>) return decoded;
       if (decoded is Map) return Map<String, dynamic>.from(decoded);
-      return {'success': false, 'message': 'API thông báo không trả JSON object.'};
+      return {'success': false, 'message': 'json'};
     } catch (_) {
-      return {
-        'success': false,
-        'message': 'API thông báo không trả JSON hợp lệ: ${body.length > 180 ? body.substring(0, 180) : body}',
-      };
+      return {'success': false, 'message': 'json'};
     }
   }
 
   static bool _isSuccess(int statusCode, Map<String, dynamic> data) {
     return statusCode >= 200 && statusCode < 300 &&
         (data['success'] == true || data['ok'] == true || data['status'] == true || data['code'] == 200);
-  }
-
-  static String _message(Map<String, dynamic> data, [String fallback = 'Có lỗi xảy ra']) {
-    return '${data['message'] ?? data['msg'] ?? data['error'] ?? fallback}';
   }
 
   static Future<Map<String, String>> _headers() async {
@@ -52,67 +42,68 @@ class NotificationService {
     return headers;
   }
 
+  static Future<Map<String, String>> _authParams({String action = 'list'}) async {
+    final token = await AuthService.getToken();
+    final cached = await AuthService.cachedUser();
+
+    final params = <String, String>{'action': action};
+    if (token != null && token.trim().isNotEmpty) params['token'] = token.trim();
+    if (cached != null && cached.id > 0) params['app_user_id'] = '${cached.id}';
+    if (cached != null && cached.username.trim().isNotEmpty) params['app_username'] = cached.username.trim();
+    return params;
+  }
+
   static Future<AppNotificationData> fetch() async {
     final token = await AuthService.getToken();
-    if (token == null || token.trim().isEmpty) return AppNotificationData.empty();
-
-    // Gửi token cả trong header và query để tránh trường hợp Apache/PHP không nhận Authorization header.
-    final uri = Uri.parse(AppConfig.notificationApiUrl).replace(queryParameters: {
-      'action': 'list',
-      'token': token.trim(),
-    });
-    final res = await http.get(uri, headers: await _headers()).timeout(const Duration(seconds: 15));
-
-    final data = _decodeJson(res.body);
-    if (!_isSuccess(res.statusCode, data)) {
-      // Không tự logout khi API thông báo lỗi 401.
-      // Nếu API thông báo chưa khớp token mà xóa token ở đây thì trang chủ/tài khoản bị mất trạng thái đăng nhập.
-      throw Exception(_message(data, 'Không lấy được thông báo.'));
+    final cached = await AuthService.cachedUser();
+    if ((token == null || token.trim().isEmpty) && (cached == null || cached.id <= 0)) {
+      return AppNotificationData.empty();
     }
 
-    return AppNotificationData.fromJson(data);
+    final uri = Uri.parse(AppConfig.notificationApiUrl).replace(queryParameters: await _authParams());
+    try {
+      final res = await http.get(uri, headers: await _headers()).timeout(const Duration(seconds: 10));
+      final data = _decodeJson(res.body);
+      if (!_isSuccess(res.statusCode, data)) return AppNotificationData.empty();
+      return AppNotificationData.fromJson(data);
+    } catch (_) {
+      return AppNotificationData.empty();
+    }
   }
 
   static Future<String> markOne(int id) async {
     if (id <= 0) return '';
+    final params = await _authParams(action: 'read_one');
+    params['id'] = '$id';
 
-    final token = await AuthService.getToken();
-    final res = await http
-        .post(
-          Uri.parse(AppConfig.notificationApiUrl),
-          headers: await _headers(),
-          body: jsonEncode({
-            'action': 'read_one',
-            'id': id,
-            if (token != null && token.trim().isNotEmpty) 'token': token.trim(),
-          }),
-        )
-        .timeout(const Duration(seconds: 15));
+    try {
+      final res = await http
+          .post(
+            Uri.parse(AppConfig.notificationApiUrl),
+            headers: await _headers(),
+            body: jsonEncode(params),
+          )
+          .timeout(const Duration(seconds: 10));
 
-    final data = _decodeJson(res.body);
-    if (!_isSuccess(res.statusCode, data)) {
-      throw Exception(_message(data, 'Không mở được thông báo.'));
+      final data = _decodeJson(res.body);
+      if (!_isSuccess(res.statusCode, data)) return '';
+      return '${data['link'] ?? data['url'] ?? ''}'.trim();
+    } catch (_) {
+      return '';
     }
-
-    return '${data['link'] ?? data['url'] ?? ''}'.trim();
   }
 
   static Future<void> markAll() async {
-    final token = await AuthService.getToken();
-    final res = await http
-        .post(
-          Uri.parse(AppConfig.notificationApiUrl),
-          headers: await _headers(),
-          body: jsonEncode({
-            'action': 'read_all',
-            if (token != null && token.trim().isNotEmpty) 'token': token.trim(),
-          }),
-        )
-        .timeout(const Duration(seconds: 15));
+    final params = await _authParams(action: 'read_all');
 
-    final data = _decodeJson(res.body);
-    if (!_isSuccess(res.statusCode, data)) {
-      throw Exception(_message(data, 'Không đọc tất cả được.'));
-    }
+    try {
+      await http
+          .post(
+            Uri.parse(AppConfig.notificationApiUrl),
+            headers: await _headers(),
+            body: jsonEncode(params),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
   }
 }

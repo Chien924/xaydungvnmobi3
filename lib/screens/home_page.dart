@@ -60,21 +60,14 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     refreshUser();
     refreshNotifications();
-    // Tải sẵn nhiều trang web chính để khi bấm vào mở nhanh hơn.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      WebPage.preloadAll();
-    });
   }
 
   Future<void> refreshUser() async {
     if (mounted) setState(() => loadingUser = true);
     try {
-      final current = await AuthService.currentUser();
-      user = current ?? await AuthService.cachedUser();
+      user = await AuthService.currentUser();
     } catch (_) {
-      // Không xóa trạng thái đăng nhập trên UI nếu API /me lỗi tạm thời.
-      // WebView có thể vẫn còn session nên chỉ dùng cache cũ để tránh app báo out giả.
-      user = await AuthService.cachedUser();
+      user = null;
     }
     if (mounted) setState(() => loadingUser = false);
   }
@@ -130,7 +123,6 @@ class _HomePageState extends State<HomePage> {
       WebPage.resetCachedControllers();
       await refreshUser();
       await refreshNotifications();
-      WebPage.preloadAll();
     }
   }
 
@@ -144,7 +136,6 @@ class _HomePageState extends State<HomePage> {
       });
     }
     await refreshUser();
-    WebPage.preloadAll();
   }
 
   void goTab(int index) {
@@ -332,17 +323,14 @@ class _HomePageState extends State<HomePage> {
         children: [
           _pageHeader(
             title: 'Quản lí',
-            subtitle: 'Tách nhóm rõ ràng để thao tác nhanh, không bị rối trên điện thoại.',
+            subtitle: '',
             icon: Icons.folder_rounded,
             color: const Color(0xff7c3aed),
           ),
           const SizedBox(height: 14),
-          // Không hiện khung "Bạn chưa đăng nhập" ở tab Quản lí.
-          // Các trang quản lí bên web đã tự kiểm tra session/token; tránh trường hợp app báo chưa đăng nhập
-          // trong khi WebView vẫn đang xem/sửa dữ liệu tài khoản bình thường.
           _manageSection(
             title: 'Tin đang quản lí',
-            subtitle: 'Xe, xác minh xe, vật tư, tổ đội, nhu cầu và việc làm.',
+            subtitle: '',
             icon: Icons.dashboard_customize_rounded,
             color: const Color(0xff2563eb),
             bgColor: const Color(0xffeff6ff),
@@ -352,7 +340,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 14),
           _manageSection(
             title: 'Theo dõi gói thầu',
-            subtitle: 'Tách riêng gói đã đăng và gói đã tham gia để dễ phân biệt.',
+            subtitle: '',
             icon: Icons.assignment_turned_in_rounded,
             color: const Color(0xff7c3aed),
             bgColor: const Color(0xfff5f3ff),
@@ -363,7 +351,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 14),
           _manageSection(
             title: 'Đối tác',
-            subtitle: 'Quản lí đối tác xe và đối tác vật tư.',
+            subtitle: '',
             icon: Icons.diversity_3_rounded,
             color: const Color(0xff0f766e),
             bgColor: const Color(0xffecfdf5),
@@ -388,7 +376,6 @@ class _HomePageState extends State<HomePage> {
       WebPage.resetCachedControllers();
       await refreshUser();
       await refreshNotifications();
-      WebPage.preloadAll();
     }
   }
 
@@ -552,7 +539,7 @@ class _HomePageState extends State<HomePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        loadingUser ? 'Đang kiểm tra tài khoản...' : 'Tài khoản: $username',
+                        loadingUser ? 'Đang tải...' : 'Tài khoản: $username',
                         style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 3),
@@ -941,7 +928,7 @@ class _HomePageState extends State<HomePage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã đọc tất cả thông báo.')),
+        const SnackBar(content: Text('Đã đọc tất cả')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -954,16 +941,6 @@ class _HomePageState extends State<HomePage> {
   Widget _notificationList({required bool userMode}) {
     final items = userMode ? notificationData.mine : notificationData.system;
     final emptyTitle = userMode ? 'Chưa có thông báo cá nhân mới' : 'Chưa có thông báo hệ thống mới';
-
-    if (userMode && user == null && !loadingUser) {
-      return ListView(
-        padding: const EdgeInsets.all(14),
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          _loginPrompt(),
-        ],
-      );
-    }
 
     return RefreshIndicator(
       onRefresh: refreshNotifications,
@@ -980,7 +957,7 @@ class _HomePageState extends State<HomePage> {
             _noticeBox(
               icon: Icons.wifi_off_rounded,
               title: 'Chưa lấy được thông báo',
-              desc: notificationError!,
+              desc: '',
               actionText: 'Tải lại',
               onAction: refreshNotifications,
             )
