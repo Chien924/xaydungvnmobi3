@@ -27,16 +27,17 @@ class AppConfig {
   // Các trang web chính cần preload/cache sẵn để bấm vào mở nhanh.
   // WebView vẫn tự quản lý cache HTML/CSS/JS/icon; app chỉ giữ controller để không phải tải lại từ đầu.
   static const List<String> preloadWebPaths = [
-    // Tìm kiếm
+    // Trang người dùng hay mở nhất - tải nền để bấm vào mở nhanh.
     '/tim-xe',
     '/tim-vat-tu',
     '/tim-to-doi',
     '/tim-goi-thau.php',
+    '/ban-do-osm-vietnam.php',
     '/tim-kiem-nhu-cau.php',
     '/viec-lam.php',
     '/tao-cv.php',
 
-    // Đăng tin
+    // Đăng tin nhanh.
     '/xe-cua-toi?tab=dang',
     '/vat-tu-cua-toi?tab=form',
     '/to-doi-cua-toi?tab=form',
@@ -45,27 +46,22 @@ class AppConfig {
     '/doi-tac-cua-toi?tab=form',
     '/viec-lam-cua-toi.php?tab=dang',
 
-    // Quản lí
+    // Quản lí.
     '/xe-cua-toi?tab=quanly',
+    '/xac-minh-xe.php',
     '/vat-tu-cua-toi?tab=quanly',
     '/to-doi-cua-toi?tab=quanly',
-    '/goi-thau-cua-toi?tab=quanly',
     '/nhu-cau-cua-toi?tab=list',
+    '/viec-lam-cua-toi.php?tab=quanly',
+    '/theo-doi-goi-thau?tab=goidang',
+    '/theo-doi-goi-thau?tab=goithamgia',
     '/doi-tac-cua-toi?tab=list_xe',
     '/doi-tac-cua-toi?tab=list_vattu',
-    '/viec-lam-cua-toi.php?tab=quanly',
 
-    // Tài khoản
+    // Tài khoản.
     '/thong-tin-ca-nhan.php',
     '/nap-tien.php',
     '/lich-su-cua-toi.php',
-
-    // Hỗ trợ + thông tin khác
-    '/app-ho-tro-test.php',
-    '/huong-dan-su-dung.php',
-    '/chinh-sach-quy-dinh.php',
-    '/lien-he-ho-tro.php',
-    '/thong-bao-he-thong.php',
   ];
 
   static String webPath(String path) {

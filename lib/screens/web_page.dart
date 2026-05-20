@@ -35,7 +35,7 @@ class _CachedWebController {
 }
 
 class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
-  static const int maxCachedControllers = 6;
+  static const int maxCachedControllers = 24;
   static final Map<String, _CachedWebController> _cache = {};
   static bool _isPreloading = false;
 
@@ -61,8 +61,35 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
   }
 
   static Future<void> preloadPaths(List<String> paths) async {
-    // Tắt preload hàng loạt để app nhẹ và đỡ giật trên máy yếu.
-    return;
+    if (kIsWeb || _isPreloading) return;
+    _isPreloading = true;
+
+    try {
+      for (final path in paths) {
+        final key = path;
+
+        if (_cache.containsKey(key)) {
+          _cache[key]!.lastUsed = DateTime.now();
+          continue;
+        }
+
+        try {
+          final url = await _buildFirstUrlForPath(path);
+          if (_shouldOpenExternally(url)) continue;
+
+          final webController = _createControllerForPath(key);
+          _cache[key] = _CachedWebController(controller: webController, url: url, isLoading: true);
+          await _trimCache();
+          await webController.loadRequest(Uri.parse(url));
+          _cache[key]?.isLoading = false;
+        } catch (_) {}
+
+        // Tải nền theo nhịp nhỏ để tránh giật lúc vừa mở app.
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+    } finally {
+      _isPreloading = false;
+    }
   }
 
   static Future<String> _buildFirstUrlForPath(String path) async {

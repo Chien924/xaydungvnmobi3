@@ -60,6 +60,9 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     refreshUser();
     refreshNotifications();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WebPage.preloadAll();
+    });
   }
 
   Future<void> refreshUser() async {
@@ -123,6 +126,7 @@ class _HomePageState extends State<HomePage> {
       WebPage.resetCachedControllers();
       await refreshUser();
       await refreshNotifications();
+      WebPage.preloadAll();
     }
   }
 
@@ -136,6 +140,7 @@ class _HomePageState extends State<HomePage> {
       });
     }
     await refreshUser();
+    WebPage.preloadAll();
   }
 
   void goTab(int index) {
@@ -262,8 +267,13 @@ class _HomePageState extends State<HomePage> {
     ];
 
     return Scaffold(
+      backgroundColor: const Color(0xfff6f8fb),
       body: SafeArea(child: pages[selectedIndex]),
       bottomNavigationBar: NavigationBar(
+        height: 66,
+        elevation: 8,
+        backgroundColor: Colors.white,
+        indicatorColor: const Color(0xffdcfce7),
         selectedIndex: selectedIndex,
         onDestinationSelected: goTab,
         destinations: [
@@ -285,7 +295,8 @@ class _HomePageState extends State<HomePage> {
     return RefreshIndicator(
       onRefresh: refreshHome,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
         children: [
           _accountCard(compact: false),
           const SizedBox(height: 14),
@@ -578,28 +589,33 @@ class _HomePageState extends State<HomePage> {
     required List<AppItem> items,
   }) {
     return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(24), border: Border.all(color: borderColor)),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+        boxShadow: const [BoxShadow(color: Color(0x0f0f172a), blurRadius: 18, offset: Offset(0, 8))],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(width: 52, height: 52, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: Colors.white, size: 28)),
-              const SizedBox(width: 12),
-              Expanded(child: Text(title, style: const TextStyle(fontSize: 22, height: 1.1, color: Color(0xff06122a), fontWeight: FontWeight.w900))),
+              Container(width: 42, height: 42, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(15)), child: Icon(icon, color: Colors.white, size: 24)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(title, style: const TextStyle(fontSize: 18, height: 1.1, color: Color(0xff06122a), fontWeight: FontWeight.w900))),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           GridView.builder(
             itemCount: items.length,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4,
-              mainAxisExtent: 92,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
+              mainAxisExtent: 84,
+              crossAxisSpacing: 7,
+              mainAxisSpacing: 7,
             ),
             itemBuilder: (context, index) {
               final item = items[index];
@@ -616,12 +632,18 @@ class _HomePageState extends State<HomePage> {
   Widget _iconButton({required AppItem item, required VoidCallback onTap}) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
+      elevation: 0,
+      shadowColor: const Color(0x160f172a),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xffeaf0f6)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 7),
           child: Column(
             children: [
               Expanded(
@@ -631,8 +653,8 @@ class _HomePageState extends State<HomePage> {
                   errorBuilder: (_, __, ___) => Icon(Icons.apps_rounded, size: 42, color: Colors.grey.shade500),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(item.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xff06122a), fontSize: 10.3, height: 1.12, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(item.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xff06122a), fontSize: 9.8, height: 1.08, fontWeight: FontWeight.w900)),
             ],
           ),
         ),
@@ -656,6 +678,7 @@ class _HomePageState extends State<HomePage> {
         color: bgColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: borderColor),
+        boxShadow: const [BoxShadow(color: Color(0x0d0f172a), blurRadius: 16, offset: Offset(0, 7))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -817,7 +840,12 @@ class _HomePageState extends State<HomePage> {
   Widget _pageHeader({required String title, required String subtitle, required IconData icon, required Color color}) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xffe5e7eb))),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xffe5e7eb)),
+        boxShadow: const [BoxShadow(color: Color(0x0a0f172a), blurRadius: 14, offset: Offset(0, 6))],
+      ),
       child: Row(
         children: [
           Container(width: 54, height: 54, decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(18)), child: Icon(icon, color: color, size: 30)),
