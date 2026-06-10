@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -21,6 +23,13 @@ class WebPage extends StatefulWidget {
 
   static Future<bool> openExternalIfNeeded(String url) => _WebPageState.openExternalIfNeeded(url);
 
+  // Mồi session đăng nhập vào cookie store dùng chung của WebView.
+  // Gọi sau khi đăng nhập/đăng ký để mọi trang web nhận ra đã đăng nhập.
+  static Future<void> warmUpWebSession() => _WebPageState.warmUpWebSession();
+
+  // App gọi hàm này để nhận sự kiện khi web yêu cầu đăng nhập.
+  static set onLoginRequired(void Function()? cb) => _WebPageState.onLoginRequired = cb;
+
   @override
   State<WebPage> createState() => _WebPageState();
 }
@@ -35,9 +44,15 @@ class _CachedWebController {
 }
 
 class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
-  static const int maxCachedControllers = 24;
+  // Giữ ít WebView sống cùng lúc để tiết kiệm RAM trên máy yếu.
+  // Mỗi WebView là một engine nặng; 24 cái đồng thời dễ làm Android kill app.
+  static const int maxCachedControllers = 8;
   static final Map<String, _CachedWebController> _cache = {};
   static bool _isPreloading = false;
+
+  // App gắn callback này để khi WebView phát hiện web yêu cầu đăng nhập
+  // thì bật màn hình đăng nhập của app.
+  static void Function()? onLoginRequired;
 
   WebViewController? controller;
   int progress = 0;
@@ -58,6 +73,44 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
   static void resetCachedControllers() {
     _cache.clear();
+  }
+
+  // Tải trang app-session-login.php một lần bằng một WebView ẩn để website
+  // tạo session cookie. Cookie store của WebView dùng chung cho mọi controller,
+  // nên sau bước này tất cả trang web sẽ nhận ra đã đăng nhập.
+  static WebViewController? _warmUpController;
+
+  static Future<void> warmUpWebSession() async {
+    if (kIsWeb) return;
+    final token = await AuthService.getToken();
+    if (token == null || token.trim().isEmpty) return;
+
+    // Đi tới trang chủ kèm token để server set cookie session.
+    final go = Uri.encodeComponent(AppConfig.withAppMode('/'));
+    final tk = Uri.encodeComponent(token.trim());
+    final warmUrl = '${AppConfig.baseUrl}/app-session-login.php?token=$tk&go=$go';
+
+    final completer = Completer<void>();
+    final c = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            if (!completer.isCompleted) completer.complete();
+          },
+          onWebResourceError: (_) {
+            if (!completer.isCompleted) completer.complete();
+          },
+        ),
+      );
+    // Giữ tham chiếu để controller không bị thu hồi trước khi tải xong.
+    _warmUpController = c;
+
+    try {
+      await c.loadRequest(Uri.parse(warmUrl));
+      // Chờ tối đa 8 giây để server set cookie xong.
+      await completer.future.timeout(const Duration(seconds: 8));
+    } catch (_) {}
   }
 
   static Future<void> preloadPaths(List<String> paths) async {
@@ -126,10 +179,6 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     // Các link file/hồ sơ/báo giá đang lưu bằng link ngoài thì cho trình duyệt mặc định xử lý.
     // Nếu link Drive nằm trong tham số redirect/go thì vẫn bắt được qua decodedUrl/query.
     if (decodedUrl.contains('drive.google.com') || decodedUrl.contains('docs.google.com')) return true;
-
-    // Trang tải CV nội bộ là ngoại lệ: vẫn thuộc xaydungvn.com.vn nhưng phải mở ngoài app.
-    // Trường hợp đã đi qua app-session-login.php thì query sẽ chứa go=...tai-cv.php...
-    if (path.contains('tai-cv') || query.contains('tai-cv')) return true;
 
     // Cờ mở ngoài dùng chung về sau cho nút tải CV/file hoặc link đặc biệt trên web.
     if (query.contains('app_open_external=1') || query.contains('open_external=1')) return true;
@@ -312,6 +361,7 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     c = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xffffffff))
+      ..enableZoom(false)
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (value) {
@@ -325,6 +375,17 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
               cached.url = url;
               cached.lastUsed = DateTime.now();
               cached.isLoading = true;
+            }
+            // Chèn CSS ẩn header NGAY khi trang bắt đầu để tránh header web
+            // hiện ra rồi mới biến mất (nhấp nháy).
+            () async {
+              try {
+                await c.runJavaScript(_hideHeadJs);
+              } catch (_) {}
+            }();
+            // Nếu web đẩy về trang đăng nhập, bật màn hình đăng nhập của app.
+            if (AppConfig.looksLikeLoginPage(url)) {
+              onLoginRequired?.call();
             }
           },
           onPageFinished: (url) async {
@@ -350,6 +411,12 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
             if (_shouldOpenExternally(request.url)) {
               await _launchOutside(request.url);
+              return NavigationDecision.prevent;
+            }
+
+            // Web yêu cầu đăng nhập -> dừng tải trang login của web, bật màn hình app.
+            if (AppConfig.looksLikeLoginPage(request.url)) {
+              onLoginRequired?.call();
               return NavigationDecision.prevent;
             }
 
@@ -383,9 +450,9 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
   static const String _hideHeadJs = r'''
     (function(){
-      var css = '.header,.head,.top-menu,.navbar,.menu-pc,.menu-mobile,.footer,.bottom-web,.banner-app,.mobile-bottom-nav,.app-download{display:none!important} body{padding-top:0!important;margin-top:0!important;scroll-behavior:auto!important;} .container,.main-container,.wrapper{max-width:100%!important;width:100%!important;} *,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important;} .aos-init,.aos-animate{transform:none!important;opacity:1!important;}';
+      var css = '.header,.head,.top-menu,.navbar,.menu-pc,.menu-mobile,.footer,.bottom-web,.banner-app,.mobile-bottom-nav,.app-download{display:none!important} body{padding-top:0!important;margin-top:0!important;scroll-behavior:auto!important;overscroll-behavior:none!important;-webkit-text-size-adjust:100%!important;} html{overscroll-behavior:none!important;} .container,.main-container,.wrapper{max-width:100%!important;width:100%!important;} *,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important;} .aos-init,.aos-animate{transform:none!important;opacity:1!important;} img{max-width:100%!important;height:auto!important;}';
       var s=document.getElementById('xaydungvn-app-hide-head');
-      if(!s){s=document.createElement('style');s.id='xaydungvn-app-hide-head';document.head.appendChild(s);} s.innerHTML=css;
+      if(!s){s=document.createElement('style');s.id='xaydungvn-app-hide-head';(document.head||document.documentElement).appendChild(s);} s.innerHTML=css;
 
       // Ép link target=_blank về cùng cửa sổ để Flutter bắt được NavigationRequest.
       function fixLinks(){
@@ -522,36 +589,76 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
     if (error != null && error!.isNotEmpty) {
       return Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(22),
           child: Container(
             width: double.infinity,
-            constraints: const BoxConstraints(maxWidth: 360),
-            padding: const EdgeInsets.all(22),
+            constraints: const BoxConstraints(maxWidth: 380),
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(28),
               border: Border.all(color: const Color(0xffe5e7eb)),
-              boxShadow: const [BoxShadow(color: Color(0x120f172a), blurRadius: 18, offset: Offset(0, 8))],
+              boxShadow: const [BoxShadow(color: Color(0x140f172a), blurRadius: 24, offset: Offset(0, 12))],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(color: const Color(0xffeef6ff), borderRadius: BorderRadius.circular(22)),
-                  child: const Icon(Icons.wifi_off_rounded, size: 34, color: Color(0xff2563eb)),
+                  width: 110,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xffeef6ff), Color(0xffdcfce7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(34),
+                  ),
+                  child: const Icon(Icons.cloud_off_rounded, size: 58, color: Color(0xff16a34a)),
                 ),
-                const SizedBox(height: 14),
-                const Text('Không mở được trang', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xff0f172a))),
-                const SizedBox(height: 6),
-                const Text('Kiểm tra mạng rồi thử lại.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xff64748b))),
-                const SizedBox(height: 16),
-                SizedBox(width: double.infinity, child: FilledButton(onPressed: () => _initWebView(forceReload: true), child: const Text('Thử lại'))),
+                const SizedBox(height: 20),
+                const Text(
+                  'Không có kết nối',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Color(0xff0f172a)),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Vui lòng kiểm tra mạng Wi-Fi hoặc dữ liệu di động rồi thử lại.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13.5, height: 1.5, fontWeight: FontWeight.w700, color: Color(0xff64748b)),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xff16a34a),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: () => _initWebView(forceReload: true),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Thử lại', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                  ),
+                ),
                 if (currentUrl.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  SizedBox(width: double.infinity, child: OutlinedButton(onPressed: () => _launchOutside(currentUrl), child: const Text('Mở trình duyệt'))),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xff16a34a)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        foregroundColor: const Color(0xff16a34a),
+                      ),
+                      onPressed: () => _launchOutside(currentUrl),
+                      icon: const Icon(Icons.open_in_browser_rounded),
+                      label: const Text('Mở bằng trình duyệt', style: TextStyle(fontWeight: FontWeight.w900)),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -563,7 +670,13 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     if (controller == null) return const Center(child: CircularProgressIndicator());
     return Column(
       children: [
-        if (progress < 100) LinearProgressIndicator(value: progress / 100),
+        if (progress < 100)
+          LinearProgressIndicator(
+            value: progress / 100,
+            minHeight: 2.5,
+            backgroundColor: const Color(0xffe8f5e9),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xff16a34a)),
+          ),
         Expanded(child: WebViewWidget(controller: controller!)),
       ],
     );
@@ -573,8 +686,15 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     if (widget.embedded) return _webBody();
-    return WillPopScope(
-      onWillPop: _handleBack,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldClose = await _handleBack();
+        if (shouldClose && mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.title),

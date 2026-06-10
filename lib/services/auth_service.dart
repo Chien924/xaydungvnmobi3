@@ -10,20 +10,32 @@ class AuthService {
   static const String _tokenKey = 'xaydungvn_app_token';
   static const String _userCacheKey = 'xaydungvn_app_user_cache';
 
+  // Cache trong RAM để không phải đọc disk mỗi lần build URL/preload.
+  // Trong vòng preload ~30 trang, hàm này được gọi rất nhiều lần.
+  static String? _tokenMem;
+  static bool _tokenLoaded = false;
+
   static Future<String?> getToken() async {
+    if (_tokenLoaded) return _tokenMem;
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_tokenKey);
-    if (token == null || token.trim().isEmpty) return null;
-    return token;
+    _tokenMem = (token == null || token.trim().isEmpty) ? null : token.trim();
+    _tokenLoaded = true;
+    return _tokenMem;
   }
 
   static Future<void> saveToken(String token) async {
     if (token.trim().isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token.trim());
+    _tokenMem = token.trim();
+    _tokenLoaded = true;
   }
 
+  static AppUser? _userMem;
+
   static Future<void> _saveUserCache(AppUser user) async {
+    _userMem = user;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_userCacheKey, jsonEncode({
       'id': user.id,
@@ -35,12 +47,16 @@ class AuthService {
   }
 
   static Future<AppUser?> cachedUser() async {
+    if (_userMem != null) return _userMem;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_userCacheKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       final data = jsonDecode(raw);
-      if (data is Map) return AppUser.fromJson(Map<String, dynamic>.from(data));
+      if (data is Map) {
+        _userMem = AppUser.fromJson(Map<String, dynamic>.from(data));
+        return _userMem;
+      }
     } catch (_) {}
     return null;
   }
@@ -49,27 +65,76 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_userCacheKey);
+    _tokenMem = null;
+    _tokenLoaded = true;
+    _userMem = null;
   }
 
   static Map<String, dynamic> _decodeJson(String body) {
     final trimmed = body.trimLeft();
     if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<HTML')) {
+      // Server trả HTML (thường là trang báo lỗi). Cố bóc câu thông báo
+      // dễ hiểu cho người dùng thay vì hiện thông báo kỹ thuật.
+      final friendly = _extractMessageFromHtml(body);
       return {
         'success': false,
-        'message': 'API đang trả về HTML. Kiểm tra lại file PHP trên public.',
+        'message': friendly ?? 'Không thực hiện được. Vui lòng thử lại.',
       };
     }
     try {
       final decoded = jsonDecode(body);
       if (decoded is Map<String, dynamic>) return decoded;
       if (decoded is Map) return Map<String, dynamic>.from(decoded);
-      return {'success': false, 'message': 'API không trả JSON object'};
+      return {'success': false, 'message': 'Không thực hiện được. Vui lòng thử lại.'};
     } catch (_) {
       return {
         'success': false,
-        'message': 'API không trả JSON hợp lệ: ${body.length > 180 ? body.substring(0, 180) : body}',
+        'message': 'Không thực hiện được. Vui lòng thử lại.',
       };
     }
+  }
+
+  // Tìm câu thông báo lỗi tiếng Việt thường gặp bên trong trang HTML.
+  static String? _extractMessageFromHtml(String html) {
+    final text = html
+        .replaceAll(RegExp(r'<script[^>]*>[\s\S]*?</script>', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'<style[^>]*>[\s\S]*?</style>', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'<[^>]+>'), ' ')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (text.isEmpty) return null;
+
+    final lower = text.toLowerCase();
+    // Các cụm lỗi hay gặp khi đăng ký trùng dữ liệu.
+    const knownPhrases = [
+      'số điện thoại đã',
+      'sđt đã',
+      'sdt đã',
+      'tài khoản đã tồn tại',
+      'tên đăng nhập đã',
+      'tài khoản đã được',
+      'đã được sử dụng',
+      'đã tồn tại',
+      'đã đăng ký',
+      'mật khẩu',
+      'không hợp lệ',
+      'sai',
+    ];
+
+    for (final p in knownPhrases) {
+      final idx = lower.indexOf(p);
+      if (idx >= 0) {
+        // Lấy câu chứa cụm lỗi (cắt theo dấu chấm gần nhất).
+        final start = text.lastIndexOf('.', idx) + 1;
+        var end = text.indexOf('.', idx);
+        if (end < 0) end = (idx + 120).clamp(0, text.length);
+        final sentence = text.substring(start, end).trim();
+        if (sentence.length >= 4 && sentence.length <= 160) return sentence;
+      }
+    }
+    return null;
   }
 
   static Map<String, dynamic>? _extractUser(Map<String, dynamic> data) {
@@ -206,8 +271,25 @@ class AuthService {
           // Nếu API đăng ký thành công nhưng không trả token thì tự đăng nhập ngay.
           return await login(username, password);
         }
-        lastError = _extractMessage(data, 'Tạo tài khoản thất bại');
+
+        // Nếu server trả về lỗi NGHIỆP VỤ rõ ràng (vd: trùng SĐT, trùng tài khoản)
+        // thì báo ngay cho người dùng, KHÔNG thử endpoint khác.
+        // Chỉ thử endpoint kế tiếp khi endpoint này thật sự không tồn tại (404/405).
+        final msg = _extractMessage(data, '');
+        final isServerHandled = res.statusCode == 200 ||
+            res.statusCode == 400 ||
+            res.statusCode == 409 ||
+            res.statusCode == 422;
+        if (isServerHandled && msg.trim().isNotEmpty) {
+          throw Exception(msg);
+        }
+        lastError = msg.trim().isNotEmpty ? msg : 'Tạo tài khoản thất bại';
       } catch (e) {
+        // Lỗi nghiệp vụ đã ném ra ở trên -> dừng luôn, không thử endpoint khác.
+        final s = e.toString();
+        if (s.startsWith('Exception:') && !s.contains('SocketException') && !s.contains('TimeoutException')) {
+          rethrow;
+        }
         lastError = e;
       }
     }

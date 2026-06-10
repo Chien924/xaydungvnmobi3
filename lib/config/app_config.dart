@@ -24,44 +24,16 @@ class AppConfig {
   static const String supportWebPath = '/app-ho-tro-test.php';
   static const String notificationApiUrl = '$baseUrl/app-thong-bao-api.php';
 
-  // Các trang web chính cần preload/cache sẵn để bấm vào mở nhanh.
-  // WebView vẫn tự quản lý cache HTML/CSS/JS/icon; app chỉ giữ controller để không phải tải lại từ đầu.
+  // Chỉ tải nền vài trang người dùng hay mở nhất.
+  // Preload quá nhiều WebView cùng lúc tốn RAM và dễ làm máy yếu bị giật/kill app.
+  // Các trang khác vẫn mở nhanh nhờ WebView tự cache HTML/CSS/JS sau lần đầu.
   static const List<String> preloadWebPaths = [
-    // Trang người dùng hay mở nhất - tải nền để bấm vào mở nhanh.
     '/tim-xe',
     '/tim-vat-tu',
     '/tim-to-doi',
-    '/tim-goi-thau.php',
     '/ban-do-osm-vietnam.php',
-    '/tim-kiem-nhu-cau.php',
     '/viec-lam.php',
     '/tao-cv.php',
-
-    // Đăng tin nhanh.
-    '/xe-cua-toi?tab=dang',
-    '/vat-tu-cua-toi?tab=form',
-    '/to-doi-cua-toi?tab=form',
-    '/goi-thau-cua-toi?tab=form',
-    '/nhu-cau-cua-toi?tab=form',
-    '/doi-tac-cua-toi?tab=form',
-    '/viec-lam-cua-toi.php?tab=dang',
-
-    // Quản lí.
-    '/xe-cua-toi?tab=quanly',
-    '/xac-minh-xe.php',
-    '/vat-tu-cua-toi?tab=quanly',
-    '/to-doi-cua-toi?tab=quanly',
-    '/nhu-cau-cua-toi?tab=list',
-    '/viec-lam-cua-toi.php?tab=quanly',
-    '/theo-doi-goi-thau?tab=goidang',
-    '/theo-doi-goi-thau?tab=goithamgia',
-    '/doi-tac-cua-toi?tab=list_xe',
-    '/doi-tac-cua-toi?tab=list_vattu',
-
-    // Tài khoản.
-    '/thong-tin-ca-nhan.php',
-    '/nap-tien.php',
-    '/lich-su-cua-toi.php',
   ];
 
   static String webPath(String path) {
@@ -112,4 +84,36 @@ class AppConfig {
 
   // Không dò nhiều đường dẫn nữa. Trang nào chỉ định thì mở đúng trang đó.
   static List<String> fallbackPaths(String path) => [path];
+
+  // Các trang web cho biết người dùng đang ở trạng thái CHƯA đăng nhập.
+  // Khi WebView bị web đẩy về một trong các trang này, app sẽ tự mở
+  // màn hình đăng nhập của app thay vì để người dùng thấy form login của web.
+  static const List<String> loginRedirectPaths = [
+    '/dang-nhap',
+    '/dang-nhap.php',
+    '/login',
+    '/login.php',
+    '/dangnhap.php',
+    '/tai-khoan/dang-nhap',
+  ];
+
+  static bool looksLikeLoginPage(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    if (!isInternalWebUrl(url)) return false;
+
+    final path = uri.path.toLowerCase();
+    for (final p in loginRedirectPaths) {
+      if (path == p || path.endsWith(p)) return true;
+    }
+
+    // Một số web đẩy về trang chủ kèm tham số yêu cầu đăng nhập.
+    final query = uri.query.toLowerCase();
+    if (query.contains('require_login=1') ||
+        query.contains('need_login=1') ||
+        query.contains('redirect_login=1')) {
+      return true;
+    }
+    return false;
+  }
 }

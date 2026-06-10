@@ -54,15 +54,51 @@ class _HomePageState extends State<HomePage> {
   String? notificationError;
   AppNotificationData notificationData = AppNotificationData.empty();
   int unreadCount = 0;
+  bool _loginSheetOpen = false;
 
   @override
   void initState() {
     super.initState();
     refreshUser();
     refreshNotifications();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Khi WebView phát hiện web bắt đăng nhập, mở màn hình đăng nhập của app.
+    WebPage.onLoginRequired = _handleWebLoginRequired;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Nếu đã đăng nhập sẵn (token còn lưu), mồi session cho WebView trước
+      // rồi mới preload để các trang web nhận ra đã đăng nhập ngay từ đầu.
+      await WebPage.warmUpWebSession();
       WebPage.preloadAll();
     });
+  }
+
+  @override
+  void dispose() {
+    WebPage.onLoginRequired = null;
+    super.dispose();
+  }
+
+  Future<void> _handleWebLoginRequired() async {
+    if (_loginSheetOpen || !mounted) return;
+    // Nếu đã đăng nhập rồi thì bỏ qua (tránh mở nhầm khi web load lại).
+    if (user != null) return;
+    _loginSheetOpen = true;
+
+    // Đóng các trang web đang mở để quay về và hiện màn đăng nhập sạch sẽ.
+    Navigator.of(context).popUntil((route) => route.isFirst);
+
+    final ok = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
+    _loginSheetOpen = false;
+
+    if (ok == true && mounted) {
+      WebPage.resetCachedControllers();
+      await WebPage.warmUpWebSession();
+      await refreshUser();
+      await refreshNotifications();
+      WebPage.preloadAll();
+    }
   }
 
   Future<void> refreshUser() async {
@@ -124,6 +160,7 @@ class _HomePageState extends State<HomePage> {
     );
     if (ok == true) {
       WebPage.resetCachedControllers();
+      await WebPage.warmUpWebSession();
       await refreshUser();
       await refreshNotifications();
       WebPage.preloadAll();
@@ -385,8 +422,10 @@ class _HomePageState extends State<HomePage> {
     );
     if (ok == true) {
       WebPage.resetCachedControllers();
+      await WebPage.warmUpWebSession();
       await refreshUser();
       await refreshNotifications();
+      WebPage.preloadAll();
     }
   }
 

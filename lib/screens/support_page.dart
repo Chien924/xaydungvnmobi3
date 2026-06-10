@@ -194,12 +194,7 @@ class _SupportPageState extends State<SupportPage> {
             itemCount: messages.length + (sending ? 1 : 0),
             itemBuilder: (context, index) {
               if (index == messages.length) {
-                return _Bubble(
-                  bot: true,
-                  text: 'Đang trả lời...',
-                  onOpenUrl: _openUrl,
-                  onChoose: choose,
-                );
+                return const _TypingBubble();
               }
               final msg = messages[index];
               return _Bubble(
@@ -418,4 +413,72 @@ class _ParsedBubble {
   final List<String> urls;
 
   const _ParsedBubble({required this.cleanText, required this.urls});
+}
+
+class _TypingBubble extends StatefulWidget {
+  const _TypingBubble();
+
+  @override
+  State<_TypingBubble> createState() => _TypingBubbleState();
+}
+
+class _TypingBubbleState extends State<_TypingBubble> with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(17),
+            topRight: Radius.circular(17),
+            bottomLeft: Radius.circular(5),
+            bottomRight: Radius.circular(17),
+          ),
+          border: Border.all(color: const Color(0xffe5e7eb)),
+          boxShadow: const [BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 3))],
+        ),
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (context, _) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(3, (i) {
+                final t = (_c.value + i * 0.2) % 1.0;
+                final scale = 0.6 + 0.4 * (1 - (t - 0.5).abs() * 2).clamp(0.0, 1.0);
+                return Padding(
+                  padding: EdgeInsets.only(right: i < 2 ? 5 : 0),
+                  child: Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: Color(0xff16a34a), shape: BoxShape.circle),
+                    ),
+                  ),
+                );
+              }),
+            );
+          },
+        ),
+      ),
+    );
+  }
 }
