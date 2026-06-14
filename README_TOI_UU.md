@@ -30,6 +30,15 @@ Các thay đổi trong bản này:
 - `build.gradle.kts`: `minSdk` tối thiểu 23 cho WebView + chọn file.
 - `codemagic.yaml`: build `--split-per-abi` để APK nhẹ hơn.
 
+## Tải CV (tai-cv.php) - CẬP NHẬT
+- tai-cv.php là TRANG HTML có nút "Tải PDF/Tải ảnh" (tạo file bằng JS trong
+  trình duyệt), không phải link tải trực tiếp.
+- WebView Android không tự lưu được file blob -> bấm tải không có gì xảy ra.
+- Trang này dùng ?id= và CV công khai (cong_khai=1) nên KHÔNG cần đăng nhập.
+- Giải pháp: tai-cv.php mở bằng TRÌNH DUYỆT NGOÀI, mở thẳng URL gốc (kèm app=1),
+  KHÔNG bọc qua app-session-login.php. Nút tải PDF/ảnh chạy tốt trên trình
+  duyệt thật. Web chỉ cần đảm bảo nút "Tải CV" trỏ tới tai-cv.php?id=<id CV>.
+
 ## Sửa lỗi đăng ký & đăng nhập (bản này)
 - Lỗi trùng SĐT / trùng tài khoản: trước báo "API trả về HTML" khó hiểu.
   Giờ app bóc đúng câu lỗi tiếng Việt từ server và hiện lên màn hình.

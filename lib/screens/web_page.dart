@@ -146,6 +146,8 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
   }
 
   static Future<String> _buildFirstUrlForPath(String path) async {
+    // Trang tải CV không cần session -> dùng URL gốc để mở ngoài cho sạch.
+    if (_isTaiCvUrl(path)) return AppConfig.withAppMode(path);
     try {
       return await AuthService.webUrlWithSession(path);
     } catch (_) {
@@ -179,6 +181,11 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     // Các link file/hồ sơ/báo giá đang lưu bằng link ngoài thì cho trình duyệt mặc định xử lý.
     // Nếu link Drive nằm trong tham số redirect/go thì vẫn bắt được qua decodedUrl/query.
     if (decodedUrl.contains('drive.google.com') || decodedUrl.contains('docs.google.com')) return true;
+
+    // Trang tải CV: mở bằng trình duyệt ngoài để nút "Tải PDF/Tải ảnh" hoạt động
+    // (WebView không tự lưu được file blob). Trang này dùng ?id= và CV công khai
+    // nên KHÔNG cần đăng nhập, mở ngoài vẫn xem và tải bình thường.
+    if (path.contains('tai-cv') || query.contains('tai-cv')) return true;
 
     // Cờ mở ngoài dùng chung về sau cho nút tải CV/file hoặc link đặc biệt trên web.
     if (query.contains('app_open_external=1') || query.contains('open_external=1')) return true;
@@ -252,12 +259,24 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
     return _looksLikeDownloadOrExternalPage(url, uri);
   }
 
+  static bool _isTaiCvUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final path = _safeDecodeLower(uri.path);
+    final query = _safeDecodeLower(uri.query);
+    return path.contains('tai-cv') || query.contains('tai-cv');
+  }
+
   static Future<bool> _launchOutside(String url) async {
     var finalUrl = url;
 
-    // Link tải CV nội bộ có thể cần session đăng nhập.
-    // Nếu web có app-session-login.php thì mở ngoài vẫn giữ được đăng nhập trước khi chuyển tới tai-cv.php.
-    if (AppConfig.isInternalWebUrl(url) && !url.contains('/app-session-login.php')) {
+    // Trang tải CV mở thẳng, KHÔNG bọc qua app-session-login.php.
+    // CV công khai chỉ cần ?id=, không cần đăng nhập; bọc session chỉ làm
+    // URL phức tạp và dễ hỏng. Chỉ đảm bảo có app=1 để web ở chế độ app.
+    if (_isTaiCvUrl(url)) {
+      finalUrl = AppConfig.withAppMode(url);
+    } else if (AppConfig.isInternalWebUrl(url) && !url.contains('/app-session-login.php')) {
+      // Các link nội bộ khác (vd báo giá) vẫn giữ session khi mở ngoài.
       try {
         finalUrl = await AuthService.webUrlWithSession(url);
       } catch (_) {}
@@ -450,22 +469,21 @@ class _WebPageState extends State<WebPage> with AutomaticKeepAliveClientMixin {
 
   static const String _hideHeadJs = r'''
     (function(){
-      var css = '.header,.head,.top-menu,.navbar,.menu-pc,.menu-mobile,.footer,.bottom-web,.banner-app,.mobile-bottom-nav,.app-download{display:none!important} body{padding-top:0!important;margin-top:0!important;scroll-behavior:auto!important;overscroll-behavior:none!important;-webkit-text-size-adjust:100%!important;} html{overscroll-behavior:none!important;} .container,.main-container,.wrapper{max-width:100%!important;width:100%!important;} *,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important;} .aos-init,.aos-animate{transform:none!important;opacity:1!important;} img{max-width:100%!important;height:auto!important;}';
+      var css = '.header,.head,.top-menu,.navbar,.menu-pc,.menu-mobile,.footer,.bottom-web,.banner-app,.mobile-bottom-nav,.app-download{display:none!important;}';
       var s=document.getElementById('xaydungvn-app-hide-head');
       if(!s){s=document.createElement('style');s.id='xaydungvn-app-hide-head';(document.head||document.documentElement).appendChild(s);} s.innerHTML=css;
 
       // Ép link target=_blank về cùng cửa sổ để Flutter bắt được NavigationRequest.
       function fixLinks(){
-        var links=document.querySelectorAll('a[href]');
+        var links=document.querySelectorAll('a[href][target]');
         for(var i=0;i<links.length;i++){
           links[i].removeAttribute('target');
-          links[i].rel='noopener noreferrer';
         }
       }
       fixLinks();
       document.addEventListener('click', function(e){
-        var a=e.target.closest && e.target.closest('a[href]');
-        if(a){a.removeAttribute('target'); a.rel='noopener noreferrer';}
+        var a=e.target && e.target.closest ? e.target.closest('a[href][target]') : null;
+        if(a){a.removeAttribute('target');}
       }, true);
     })();
   ''';

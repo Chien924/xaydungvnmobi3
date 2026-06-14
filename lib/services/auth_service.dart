@@ -197,6 +197,30 @@ class AuthService {
     return cache;
   }
 
+  // Đăng nhập Google: app đã có idToken từ google_sign_in (native),
+  // gửi lên server để đổi lấy app_token và đăng nhập đầy đủ.
+  static Future<AppUser> loginWithGoogleIdToken(String idToken) async {
+    final res = await http
+        .post(
+          Uri.parse(AppConfig.googleLoginAppEndpoint),
+          headers: {'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json'},
+          body: jsonEncode({'id_token': idToken}),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    final data = _decodeJson(res.body);
+    if (_isSuccess(res.statusCode, data)) {
+      final token = _extractToken(data);
+      if (token.isEmpty) throw Exception('Server chưa trả token Google.');
+      await saveToken(token);
+      final userMap = _extractUser(data) ?? {'username': 'google_user'};
+      final user = AppUser.fromJson(userMap);
+      await _saveUserCache(user);
+      return user;
+    }
+    throw Exception(_extractMessage(data, 'Đăng nhập Google không thành công'));
+  }
+
   static Future<AppUser> login(String username, String password) async {
     Object? lastError;
     for (final endpoint in AppConfig.loginEndpoints) {
@@ -227,7 +251,9 @@ class AuthService {
     throw Exception('$lastError'.replaceFirst('Exception: ', ''));
   }
 
-  static Future<AppUser> register({
+  // Trả về true nếu tạo tài khoản thành công. KHÔNG tự đăng nhập:
+  // người dùng sẽ tự nhập tài khoản/mật khẩu ở màn đăng nhập cho an toàn.
+  static Future<bool> register({
     required String username,
     required String password,
     required String phone,
@@ -259,17 +285,8 @@ class AuthService {
 
         final data = _decodeJson(res.body);
         if (_isSuccess(res.statusCode, data)) {
-          final token = _extractToken(data);
-          if (token.isNotEmpty) {
-            await saveToken(token);
-            final userMap = _extractUser(data) ?? {'username': username, 'phone': phone, 'sdt': phone};
-            final user = AppUser.fromJson(userMap);
-            await _saveUserCache(user);
-            return user;
-          }
-
-          // Nếu API đăng ký thành công nhưng không trả token thì tự đăng nhập ngay.
-          return await login(username, password);
+          // Thành công - không lưu token, không đăng nhập tự động.
+          return true;
         }
 
         // Nếu server trả về lỗi NGHIỆP VỤ rõ ràng (vd: trùng SĐT, trùng tài khoản)

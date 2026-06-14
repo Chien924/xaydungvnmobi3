@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import 'login_page.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -63,8 +64,16 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       await AuthService.register(username: username, password: password, phone: phone);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tạo tài khoản thành công')));
-      Navigator.pop(context, true);
+      // Không tự đăng nhập. Đưa người dùng sang màn đăng nhập, điền sẵn tài khoản.
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LoginPage(
+            prefillUsername: username,
+            infoMessage: 'Tạo tài khoản thành công. Mời bạn đăng nhập.',
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         final msg = e.toString().replaceFirst('Exception: ', '');

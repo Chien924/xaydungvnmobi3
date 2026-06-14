@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_config.dart';
 import '../models/app_user.dart';
 import '../models/app_notification.dart';
 import '../services/auth_service.dart';
@@ -522,6 +523,7 @@ class _HomePageState extends State<HomePage> {
           _accountAction('Nạp tiền', Icons.account_balance_wallet_rounded, '/nap-tien.php'),
           _accountAction('Lịch sử của tôi', Icons.history_rounded, '/lich-su-cua-toi.php'),
           _accountAction('Thông tin cá nhân', Icons.badge_rounded, '/thong-tin-ca-nhan.php'),
+          _accountAction('Đổi mật khẩu', Icons.lock_reset_rounded, AppConfig.changePasswordPath),
         ],
       ),
     );

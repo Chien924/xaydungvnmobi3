@@ -18,6 +18,29 @@ class AppConfig {
     '$apiBaseUrl/app/me.php',
   ];
 
+  // Endpoint đăng nhập Google cho app (native). App gửi id_token, nhận app_token.
+  static const String googleLoginAppEndpoint = '$baseUrl/google-login-app.php';
+
+  // Web Client ID của Google (giống trong google-callback.php).
+  // Dùng cho serverClientId của google_sign_in để Google trả idToken đúng audience.
+  static const String googleWebClientId =
+      '692778120034-no4ilrgeb0soa892odju3jq9a3n8ctq1.apps.googleusercontent.com';
+
+  // ===== Các trang xác thực mở bằng WebView (dùng trang web sẵn có) =====
+  // Đăng nhập Google: nút Google nằm trên trang đăng nhập của web (dang-nhap.php).
+  // Người dùng bấm nút Google -> Google xác thực -> google-callback.php set
+  // session -> web chuyển về index.php. App nhận biết thành công khi về index.php.
+  // Lưu ý: luồng này chỉ tạo SESSION COOKIE (không có token API).
+  static const String googleLoginPath = '/dang-nhap.php';
+  static const String forgotPasswordPath = '/quen-mat-khau.php';
+  static const String changePasswordPath = '/doi-mat-khau.php';
+
+  // Khi WebView về một trong các URL này nghĩa là đã đăng nhập thành công.
+  static const List<String> loginSuccessMarkers = [
+    '/index.php',
+    '/trang-chu',
+  ];
+
   // Bot API cũ của bạn đang nằm trong thư mục "bot chat".
   // Encode dấu cách thành %20 để WebView/fetch gọi ổn định.
   static const String botApiUrl = '$baseUrl/bot-api-app.php';
